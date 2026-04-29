@@ -1,0 +1,144 @@
+# Dataset manifest.
+#
+# Each entry lists files plus their license + citation. Files marked
+# `bundled: true` ship with the package under `llm_evalbox/data/datasets/`
+# and are loaded without any network access. For non-bundled future
+# datasets, set a `url` (and ideally `sha256`) and they will be lazily
+# downloaded into `~/.cache/llm-evalbox/datasets/<name>/`.
+#
+# Resolution order at runtime: bundled → cache dir → URL fetch.
+#
+# All bundled corpora here use permissive licenses (MIT / Apache-2.0 / CC).
+# Sourced from the upstream datasets cited below; unmodified copies.
+
+mmlu:
+  bundled: true
+  license: MIT
+  citation: "Hendrycks et al. 2020 — Measuring Massive Multitask Language Understanding"
+  source: "https://huggingface.co/datasets/cais/mmlu"
+  files:
+    - name: mmlu_test.jsonl
+    - name: mmlu_dev.jsonl
+
+mmlu_pro:
+  bundled: true
+  license: MIT
+  citation: "Wang et al. 2024 — MMLU-Pro"
+  source: "https://huggingface.co/datasets/TIGER-Lab/MMLU-Pro"
+  files:
+    - name: mmlu_pro_test.jsonl
+
+gsm8k:
+  bundled: true
+  license: MIT
+  citation: "Cobbe et al. 2021 — Training Verifiers to Solve Math Word Problems"
+  source: "https://huggingface.co/datasets/openai/gsm8k"
+  files:
+    - name: gsm8k_test.jsonl
+
+mathqa:
+  bundled: true
+  license: Apache-2.0
+  citation: "Amini et al. 2019 — MathQA"
+  source: "https://huggingface.co/datasets/allenai/math_qa"
+  files:
+    - name: mathqa_test.jsonl
+
+humaneval:
+  bundled: true
+  license: MIT
+  citation: "Chen et al. 2021 — Evaluating Large Language Models Trained on Code"
+  source: "https://huggingface.co/datasets/openai/openai_humaneval"
+  files:
+    - name: humaneval.jsonl
+
+mbpp:
+  bundled: true
+  license: CC-BY-4.0
+  citation: "Austin et al. 2021 — Mostly Basic Python Problems"
+  source: "https://huggingface.co/datasets/google-research-datasets/mbpp"
+  files:
+    - name: mbpp.jsonl
+
+livecodebench:
+  bundled: true
+  license: see-upstream
+  citation: "Jain et al. 2024 — LiveCodeBench"
+  source: "https://huggingface.co/datasets/livecodebench/code_generation_lite"
+  files:
+    - name: livecodebench.jsonl
+
+truthfulqa:
+  bundled: true
+  license: Apache-2.0
+  citation: "Lin et al. 2021 — TruthfulQA"
+  source: "https://huggingface.co/datasets/truthfulqa/truthful_qa"
+  files:
+    - name: truthfulqa_mc.jsonl
+
+hellaswag:
+  bundled: true
+  license: MIT
+  citation: "Zellers et al. 2019 — HellaSwag"
+  source: "https://huggingface.co/datasets/Rowan/hellaswag"
+  files:
+    - name: hellaswag_val.jsonl
+
+arc_challenge:
+  bundled: true
+  license: CC-BY-SA-4.0
+  citation: "Clark et al. 2018 — Think You Have Solved Question Answering?"
+  source: "https://huggingface.co/datasets/allenai/ai2_arc"
+  files:
+    - name: arc_challenge.jsonl
+
+winogrande:
+  bundled: true
+  license: CC-BY-4.0
+  citation: "Sakaguchi et al. 2019 — Winogrande"
+  source: "https://huggingface.co/datasets/allenai/winogrande"
+  files:
+    - name: winogrande_val.jsonl
+
+bbq:
+  bundled: true
+  license: CC-BY-4.0
+  citation: "Parrish et al. 2022 — BBQ"
+  source: "https://huggingface.co/datasets/heegyu/bbq"
+  files:
+    - name: bbq_test.jsonl
+
+safetybench:
+  bundled: true
+  license: MIT
+  citation: "Zhang et al. 2023 — SafetyBench (English split)"
+  source: "https://huggingface.co/datasets/thu-coai/SafetyBench"
+  files:
+    - name: safetybench_en.jsonl
+
+kmmlu:
+  bundled: true
+  license: CC-BY-NC-SA-4.0
+  citation: "Son et al. 2024 — KMMLU"
+  source: "https://huggingface.co/datasets/HAERAE-HUB/KMMLU"
+  files:
+    - name: kmmlu_test.jsonl
+    - name: kmmlu_dev.jsonl
+
+cmmlu:
+  bundled: true
+  license: CC-BY-NC-4.0
+  citation: "Li et al. 2023 — CMMLU"
+  source: "https://huggingface.co/datasets/haonan-li/cmmlu"
+  files:
+    - name: cmmlu_test.jsonl
+    - name: cmmlu_dev.jsonl
+
+jmmlu:
+  bundled: true
+  license: CC-BY-SA-4.0
+  citation: "JMMLU"
+  source: "https://huggingface.co/datasets/nlp-waseda/JMMLU"
+  files:
+    - name: jmmlu_test.jsonl
+    - name: jmmlu_dev.jsonl

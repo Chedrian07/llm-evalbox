@@ -1,0 +1,113 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llm-evalbox"
+dynamic = ["version"]
+description = "Lightweight LLM evaluation tool for OpenAI-compatible endpoints (Chat Completions / Responses) with CLI and local Web UI."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "llm-evalbox contributors" }]
+keywords = ["llm", "evaluation", "benchmark", "openai", "mmlu", "gsm8k", "humaneval"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "httpx[http2]>=0.27",
+    "pydantic>=2.7",
+    "typer>=0.12",
+    "rich>=13",
+    "tenacity>=8",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "sse-starlette>=2.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+evalbox = "llm_evalbox.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/llm-evalbox/llm-evalbox"
+Issues = "https://github.com/llm-evalbox/llm-evalbox/issues"
+
+[tool.hatch.version]
+path = "llm_evalbox/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["llm_evalbox"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"llm_evalbox/data/manifest.yaml" = "llm_evalbox/data/manifest.yaml"
+"llm_evalbox/data/datasets" = "llm_evalbox/data/datasets"
+"llm_evalbox/pricing/catalog.yaml" = "llm_evalbox/pricing/catalog.yaml"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "llm_evalbox",
+    "tests",
+    "README.md",
+    "LICENSE",
+    "PLAN.md",
+    "CLAUDE.md",
+    ".env.example",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "RUF"]
+# B008: typer.Option(...) in defaults is the typer-idiomatic pattern
+# B027: ABC method with empty body is intentional (close hook)
+# RUF001/002/003: ambiguous unicode chars in docs are deliberate (×, →, …)
+# RUF034: ternary symmetry in test code is sometimes more readable
+ignore = ["E501", "B008", "B027", "RUF001", "RUF002", "RUF003", "RUF034"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F841", "RUF059"]
+"llm_evalbox/eval/base.py" = ["F841"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["llm_evalbox"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "llm_evalbox.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

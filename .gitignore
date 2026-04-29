@@ -1,0 +1,109 @@
+# ─────────────────────────────────────────────
+#  Local-only docs (사용자 요청)
+# ─────────────────────────────────────────────
+CLAUDE.md
+PLAN.md
+
+# ─────────────────────────────────────────────
+#  Reference / vendored upstream
+# ─────────────────────────────────────────────
+omlx/
+
+# ─────────────────────────────────────────────
+#  Python
+# ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+*.whl
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+.python-version  # 단, 프로젝트 표준 버전을 커밋하려면 이 줄 제거
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ─────────────────────────────────────────────
+#  Environment / secrets
+# ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.env.local
+
+# ─────────────────────────────────────────────
+#  Node / Vite / pnpm  (web_src/, e2e/)
+# ─────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.local
+
+# Vite
+.vite/
+web_src/dist/
+web_src/.turbo/
+
+# Frontend 빌드 산출물 (wheel 빌드 시점에 생성)
+llm_evalbox/web/frontend/
+
+# Playwright
+e2e/test-results/
+e2e/playwright-report/
+e2e/.cache/
+playwright/.cache/
+
+# ─────────────────────────────────────────────
+#  Runtime artifacts
+# ─────────────────────────────────────────────
+evalbox-runs/
+.cache/
+.evalbox/
+
+# ─────────────────────────────────────────────
+#  Editors / OS
+# ─────────────────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─────────────────────────────────────────────
+#  Misc
+# ─────────────────────────────────────────────
+*.log
+*.pid
+*.seed
+*.pid.lock

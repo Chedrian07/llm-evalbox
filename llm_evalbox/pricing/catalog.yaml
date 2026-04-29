@@ -1,0 +1,114 @@
+# Per-million-token unit prices in USD.
+# Match by `pattern` (regex, case-insensitive). First match wins, so list
+# specific entries before generic ones.
+#
+# Keys:
+#   input          — uncached prompt tokens
+#   cached_input   — cached prompt tokens (typically 50% of input)
+#   output         — completion tokens
+#   reasoning      — reasoning tokens (often == output; some providers separate)
+#
+# All values in USD per 1,000,000 tokens. Set to null to leave a slot unknown
+# (cost field will then be null in the result).
+#
+# Refresh: `scripts/refresh_pricing.py` (M2).
+
+models:
+  # ---- OpenAI ----
+  - pattern: "^gpt-4o-mini"
+    input: 0.15
+    cached_input: 0.075
+    output: 0.60
+    reasoning: 0.60
+
+  - pattern: "^gpt-4o"
+    input: 2.50
+    cached_input: 1.25
+    output: 10.00
+    reasoning: 10.00
+
+  - pattern: "^gpt-4-turbo"
+    input: 10.00
+    cached_input: 10.00
+    output: 30.00
+    reasoning: 30.00
+
+  - pattern: "^gpt-4(\\b|-)"
+    input: 30.00
+    cached_input: 30.00
+    output: 60.00
+    reasoning: 60.00
+
+  - pattern: "^gpt-3\\.5-turbo"
+    input: 0.50
+    cached_input: 0.50
+    output: 1.50
+    reasoning: 1.50
+
+  - pattern: "^o1-mini"
+    input: 1.10
+    cached_input: 0.55
+    output: 4.40
+    reasoning: 4.40
+
+  - pattern: "^o1(\\b|-)"
+    input: 15.00
+    cached_input: 7.50
+    output: 60.00
+    reasoning: 60.00
+
+  - pattern: "^o3-mini"
+    input: 1.10
+    cached_input: 0.55
+    output: 4.40
+    reasoning: 4.40
+
+  - pattern: "^o3(\\b|-)"
+    input: 2.00
+    cached_input: 0.50
+    output: 8.00
+    reasoning: 8.00
+
+  - pattern: "^o4-mini"
+    input: 1.10
+    cached_input: 0.275
+    output: 4.40
+    reasoning: 4.40
+
+  - pattern: "^gpt-5(\\b|-)"
+    input: 1.25
+    cached_input: 0.125
+    output: 10.00
+    reasoning: 10.00
+
+  # ---- Anthropic via OpenRouter ----
+  - pattern: "claude.*sonnet"
+    input: 3.00
+    cached_input: 0.30
+    output: 15.00
+    reasoning: 15.00
+
+  - pattern: "claude.*opus"
+    input: 15.00
+    cached_input: 1.50
+    output: 75.00
+    reasoning: 75.00
+
+  - pattern: "claude.*haiku"
+    input: 0.80
+    cached_input: 0.08
+    output: 4.00
+    reasoning: 4.00
+
+  # ---- Google Gemini OpenAI-compat ----
+  - pattern: "gemini.*1\\.5-flash"
+    input: 0.075
+    cached_input: 0.01875
+    output: 0.30
+    reasoning: 0.30
+
+  - pattern: "gemini.*1\\.5-pro"
+    input: 1.25
+    cached_input: 0.3125
+    output: 5.00
+    reasoning: 5.00
