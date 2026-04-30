@@ -109,6 +109,7 @@ def cmd_run(
     drop_params: str | None = typer.Option(None, "--drop-params", envvar="EVALBOX_DROP_PARAMS"),
     accept_code: bool = typer.Option(False, "--accept-code-exec"),
     no_code_bench: bool = typer.Option(False, "--no-code-bench"),
+    lcb_cutoff: str | None = typer.Option(None, "--lcb-cutoff", help="LiveCodeBench: keep only items with release_date >= YYYY-MM-DD"),
     profile: str | None = typer.Option(None, "--profile"),
     env_file: str | None = typer.Option(None, "--env-file"),
     output_dir: Path | None = typer.Option(None, "--output-dir"),
@@ -162,6 +163,10 @@ def cmd_run(
     benches = [get_benchmark(n) for n in bench_names]
     if no_code_bench:
         benches = [b for b in benches if not b.is_code_bench()]
+    if lcb_cutoff:
+        for b in benches:
+            if b.name == "livecodebench":
+                b.cutoff = lcb_cutoff
 
     sampling_obj = None
     eff_temp = temperature if temperature is not None else env_float("EVALBOX_TEMPERATURE")

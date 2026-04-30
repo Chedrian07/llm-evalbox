@@ -2,7 +2,6 @@
 
 > OpenAI 호환 (`/v1/chat/completions`, `/v1/responses`) 엔드포인트의 `BASE_URL` + `MODEL_NAME` 두 가지만으로 학술 벤치마크(MMLU / GSM8K / HumanEval / TruthfulQA / HellaSwag …)를 CLI 또는 로컬 웹 UI 로 즉시 실행하는 경량 평가 도구.
 
-상태: **M0 (Core + 최소 CLI) 개발 중**. 자세한 설계는 [`PLAN.md`](./PLAN.md), 작업 가이드는 [`CLAUDE.md`](./CLAUDE.md).
 
 ## 빠른 시작
 

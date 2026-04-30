@@ -108,9 +108,12 @@ def apply_thinking_to_request(
     if fam.encoder == "chat_template":
         ct["enable_thinking"] = enabled
     elif fam.encoder == "reasoning_effort":
-        # default "high" when on, "minimal" when off (per §6.2.2)
+        # On → "high"; off → "low". OpenAI public o-series accepts "minimal"
+        # but several gpt-5 variants (e.g. gpt-5.4-mini via cliproxy) reject it
+        # and require one of {low, medium, high, xhigh}. "low" is the safe
+        # cross-vendor floor.
         if re_eff is None:
-            re_eff = "high" if enabled else "minimal"
+            re_eff = "high" if enabled else "low"
     elif fam.encoder == "openrouter_extra":
         # Anthropic via OpenRouter chat-completions
         et = dict(ex.get("extended_thinking", {}))

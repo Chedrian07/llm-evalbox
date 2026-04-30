@@ -10,6 +10,8 @@ from llm_evalbox.eval.base import (
 from llm_evalbox.eval.gsm8k import GSM8KBenchmark
 from llm_evalbox.eval.hellaswag import HellaSwagBenchmark
 from llm_evalbox.eval.humaneval import HumanEvalBenchmark
+from llm_evalbox.eval.livecodebench import LiveCodeBenchBenchmark
+from llm_evalbox.eval.mbpp import MBPPBenchmark
 from llm_evalbox.eval.mmlu import MMLUBenchmark
 from llm_evalbox.eval.truthfulqa import TruthfulQABenchmark
 
@@ -17,6 +19,8 @@ BENCHMARKS: dict[str, type[BaseBenchmark]] = {
     "mmlu": MMLUBenchmark,
     "gsm8k": GSM8KBenchmark,
     "humaneval": HumanEvalBenchmark,
+    "mbpp": MBPPBenchmark,
+    "livecodebench": LiveCodeBenchBenchmark,
     "truthfulqa": TruthfulQABenchmark,
     "hellaswag": HellaSwagBenchmark,
 }

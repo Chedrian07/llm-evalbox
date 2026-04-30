@@ -45,6 +45,30 @@ def test_apply_thinking_qwen3_on():
     assert ex == {}
 
 
+def test_apply_thinking_o_series_off_default_low():
+    """off → 'low' (cross-vendor safe; some gpt-5 variants reject 'minimal')."""
+    ct, re_eff, ex, warns = apply_thinking_to_request(
+        model="o3-mini",
+        mode="off",
+        chat_template_kwargs={},
+        reasoning_effort=None,
+        extra={},
+    )
+    assert re_eff == "low"
+
+
+def test_apply_thinking_explicit_effort_preserved():
+    """User-specified reasoning_effort is never overwritten."""
+    ct, re_eff, ex, warns = apply_thinking_to_request(
+        model="gpt-5",
+        mode="off",
+        chat_template_kwargs={},
+        reasoning_effort="minimal",  # user opted into minimal explicitly
+        extra={},
+    )
+    assert re_eff == "minimal"
+
+
 def test_apply_thinking_o_series_on_default_high():
     ct, re_eff, ex, warns = apply_thinking_to_request(
         model="o3-mini",
