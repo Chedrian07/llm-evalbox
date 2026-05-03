@@ -159,11 +159,18 @@ export const useApp = create<AppState>((set, get) => ({
   setConnection: (patch) =>
     set((prev) => {
       const next: Partial<AppState> = { ...patch };
+      const connectionChanged = (
+        ["baseUrl", "model", "adapter", "apiKey", "apiKeyEnv"] as const
+      ).some((key) => patch[key] !== undefined && patch[key] !== prev[key]);
       // When the user switches the env-var selector, recompute hasServerApiKey
       // from the snapshot we got at mount. Without this the badge can show
       // "key picked up" for an env var that isn't actually set.
       if (patch.apiKeyEnv && prev.serverApiKeys) {
         next.hasServerApiKey = !!prev.serverApiKeys[patch.apiKeyEnv];
+      }
+      if (connectionChanged) {
+        next.conn = null;
+        next.capability = null;
       }
       return next;
     }),

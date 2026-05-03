@@ -40,8 +40,14 @@
     "models_error": "이 게이트웨이는 /v1/models 를 노출하지 않음 — 모델명 직접 입력",
     "model_picker_title": "조회된 모델",
     "model_picker_showing": "{{visible}} / {{total}}",
+    "model_picker_select": "조회된 모델에서 선택",
+    "model_picker_manual": "직접 입력한 모델 사용 중",
+    "model_picker_search_label": "필터",
     "model_picker_search": "모델 필터",
-    "model_picker_empty": "일치하는 모델 없음"
+    "model_picker_empty": "일치하는 모델 없음",
+    "model_picker_not_listed": "\"{{model}}\"은 조회된 목록에 없습니다. 입력한 값 그대로 사용합니다.",
+    "model_picker_unknown_owner": "owner 정보 없음",
+    "model_picker_more": "{{hidden}}개가 표시 제한으로 숨겨졌습니다. 필터로 좁혀보세요."
   },
   "capability": {
     "title": "Capability",

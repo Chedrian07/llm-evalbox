@@ -40,8 +40,14 @@
     "models_error": "This gateway doesn't expose /v1/models — type the model name",
     "model_picker_title": "Available models",
     "model_picker_showing": "{{visible}} / {{total}}",
+    "model_picker_select": "Choose from discovered models",
+    "model_picker_manual": "Using manually typed model",
+    "model_picker_search_label": "Filter",
     "model_picker_search": "Filter models",
-    "model_picker_empty": "No matching models"
+    "model_picker_empty": "No matching models",
+    "model_picker_not_listed": "\"{{model}}\" is not in the discovered list. It will still be used as typed.",
+    "model_picker_unknown_owner": "unknown owner",
+    "model_picker_more": "{{hidden}} more hidden by the display limit. Use filter to narrow."
   },
   "capability": {
     "title": "Capability",
