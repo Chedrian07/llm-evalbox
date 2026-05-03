@@ -417,6 +417,7 @@ async def _run_async(
                     cache=cache,
                     base_url=base_url,
                     prompt_cache_aware=prompt_cache_aware,
+                    initial_drop_params=list(user_drop),
                 )
                 results.append(result)
 

@@ -18,7 +18,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from llm_evalbox.adapters.base import ChatAdapter
-from llm_evalbox.core.exceptions import AdapterError
+from llm_evalbox.adapters.capabilities import (
+    KNOWN_SAMPLING_KEYS,
+    parse_unsupported_param_error,
+)
+from llm_evalbox.core.exceptions import AdapterError, BadRequestError
 from llm_evalbox.core.messages import Message
 from llm_evalbox.core.request import ChatRequest, ChatResponse, Usage
 
@@ -62,6 +66,9 @@ class BenchmarkResult:
     denominator_policy: str = "lenient"  # "lenient" (ok|wrong_answer) | "strict" (all)
     cost_usd_estimated: float | None = None
     questions: list[QuestionResult] = field(default_factory=list)
+    # Sampling keys the run learned to drop after the gateway returned 4xx.
+    # Persisted via `remember_learned()` for the model so future runs skip.
+    learned_drop_params: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -195,6 +202,7 @@ class BaseBenchmark(ABC):
         cache: Any | None = None,
         base_url: str = "",
         prompt_cache_aware: bool = False,
+        runtime_drops: set[str] | None = None,
     ) -> tuple[int, dict, ChatResponse | None, str, str]:
         """Run one item.
 
@@ -202,6 +210,11 @@ class BaseBenchmark(ABC):
         Code-execution scoring is *not* done here — only the model call. The
         caller (run) walks results and calls check_answer; code benches
         override `_score_response` to plug sandbox.
+
+        `runtime_drops` is a shared, mutable set updated by `run()` whenever the
+        gateway tells us a sampling key is unsupported. We merge it into the
+        request before each call so subsequent items skip the offender, and we
+        retry the current item once after learning a new key.
         """
         req = self._build_request(
             model=model,
@@ -211,6 +224,10 @@ class BaseBenchmark(ABC):
             strict=strict,
             prompt_cache_aware=prompt_cache_aware,
         )
+        if runtime_drops:
+            req = req.model_copy(update={
+                "drop_params": sorted(set(req.drop_params) | runtime_drops)
+            })
         prompt_text = "\n".join(m.content for m in req.messages)
 
         # Cache lookup (response cache, PLAN §13.3) — gated on caller passing
@@ -244,6 +261,53 @@ class BaseBenchmark(ABC):
                 if cache is not None and cache_k is not None:
                     cache.put(cache_k, resp)
                 return index, item, resp, "ok", prompt_text
+            except BadRequestError as e:
+                # Adaptive learning: the gateway told us a key it doesn't accept.
+                # We retry with `runtime_drops` merged in. There are two cases:
+                #   1. We just learned a new key — log it.
+                #   2. A sibling task (same batch, racing) already learned the
+                #      same key while we were in flight; we didn't add anything
+                #      new, but `runtime_drops` is now bigger than this
+                #      request's `drop_params`, so a retry is still worthwhile.
+                # Both cases share the same retry path.
+                unsupported = parse_unsupported_param_error(str(e))
+                detected = unsupported & set(KNOWN_SAMPLING_KEYS)
+                new_drops: set[str] = set()
+                if runtime_drops is not None:
+                    new_drops = detected - runtime_drops
+                    if new_drops:
+                        runtime_drops.update(new_drops)
+                already_known = (
+                    runtime_drops is not None
+                    and bool(runtime_drops - set(req.drop_params))
+                )
+                if new_drops or already_known:
+                    if new_drops:
+                        logger.warning(
+                            "item %d: 4xx, learned drop_params=%s, retrying",
+                            index, sorted(new_drops),
+                        )
+                    else:
+                        logger.info(
+                            "item %d: 4xx, retrying with shared drops=%s",
+                            index, sorted(runtime_drops or ()),
+                        )
+                    retried = req.model_copy(update={
+                        "drop_params": sorted(set(req.drop_params) | (runtime_drops or set()))
+                    })
+                    try:
+                        resp = await adapter.chat(retried)
+                        if cache is not None and cache_k is not None:
+                            cache.put(cache_k, resp)
+                        return index, item, resp, "ok", prompt_text
+                    except AdapterError as e2:
+                        logger.warning(
+                            "item %d: retry after learning still failed: %s",
+                            index, e2,
+                        )
+                        return index, item, None, "network", prompt_text
+                logger.warning("adapter 4xx on item %d (no learnable key): %s", index, e)
+                return index, item, None, "network", prompt_text
             except AdapterError as e:
                 logger.warning("adapter error on item %d: %s", index, e)
                 return index, item, None, "network", prompt_text
@@ -288,6 +352,7 @@ class BaseBenchmark(ABC):
         cache: Any | None = None,
         base_url: str = "",
         prompt_cache_aware: bool = False,
+        initial_drop_params: list[str] | None = None,
     ) -> BenchmarkResult:
         """Run the benchmark. Returns aggregated `BenchmarkResult`.
 
@@ -316,6 +381,12 @@ class BaseBenchmark(ABC):
         total = len(items)
         start = time.time()
 
+        # Shared mutable across all parallel items in this run. Seeded with any
+        # caller-supplied drops (e.g. the Web UI's lookup_learned for the
+        # current model). New entries are added when adapter.chat raises
+        # BadRequestError and parse_unsupported_param_error finds a sampling key.
+        runtime_drops: set[str] = set(initial_drop_params or [])
+
         thinking_mode = thinking
         thinking_used = thinking == "on"
         first_batch_indices: list[int] = []
@@ -341,6 +412,7 @@ class BaseBenchmark(ABC):
                     cache=cache,
                     base_url=base_url,
                     prompt_cache_aware=prompt_cache_aware,
+                    runtime_drops=runtime_drops,
                 )
                 for i in batch_indices
             ]
@@ -371,6 +443,7 @@ class BaseBenchmark(ABC):
                                 sem=sem,
                                 cache=cache,
                                 base_url=base_url,
+                                runtime_drops=runtime_drops,
                             )
                             for i in batch_indices
                         ]
@@ -462,6 +535,25 @@ class BaseBenchmark(ABC):
                 c: (cat_correct.get(c, 0) / cat_total[c]) for c in sorted(cat_total)
             }
 
+        # Persist anything we learned at runtime so future runs skip the
+        # offending keys from the start. We only persist new keys (those not
+        # in the caller-supplied initial set).
+        learned_new = sorted(runtime_drops - set(initial_drop_params or []))
+        if learned_new:
+            try:
+                # Merge with any existing record so we don't shrink it.
+                from llm_evalbox.adapters.learned import lookup as _lookup_learned
+                from llm_evalbox.adapters.learned import remember as _remember_learned
+                existing = set(_lookup_learned(model))
+                merged = sorted(existing | set(learned_new))
+                _remember_learned(model, merged)
+                logger.info(
+                    "%s: persisted learned drop_params=%s for model=%s",
+                    self.name, learned_new, model,
+                )
+            except Exception as e:  # pragma: no cover — disk write best-effort
+                logger.warning("could not persist learned drop_params: %s", e)
+
         return BenchmarkResult(
             benchmark_name=self.name,
             samples=total,
@@ -477,4 +569,5 @@ class BaseBenchmark(ABC):
             thinking_used=thinking_used,
             denominator_policy="strict" if strict_failures else "lenient",
             questions=ordered,
+            learned_drop_params=sorted(runtime_drops),
         )

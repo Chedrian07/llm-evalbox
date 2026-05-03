@@ -14,6 +14,7 @@ from sse_starlette.sse import EventSourceResponse
 from llm_evalbox.adapters import resolve_adapter
 from llm_evalbox.adapters.auth import resolve_api_key
 from llm_evalbox.adapters.capabilities import capability_for
+from llm_evalbox.adapters.learned import lookup as lookup_learned
 from llm_evalbox.cache import ResponseCache
 from llm_evalbox.core.exceptions import EvalBoxError
 from llm_evalbox.eval import BENCHMARKS, get_benchmark
@@ -129,6 +130,16 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
                 reasoning_effort=req.sampling.get("reasoning_effort"),
             )
 
+        # Seed runtime drops with anything doctor (or a previous run) learned
+        # for this model. Combined with the user's explicit drop_params from
+        # the request, this is the initial set the eval loop applies.
+        seeded_drops = sorted(set(lookup_learned(req.connection.model)) | set(req.drop_params))
+        if seeded_drops:
+            logger.info(
+                "seeding runtime drops for model=%s: %s",
+                req.connection.model, seeded_drops,
+            )
+
         results: list = []
         costs: dict[str, float | None] = {}
         cumulative_cost = 0.0
@@ -172,6 +183,7 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
                     strict_failures=req.strict_failures,
                     cache=cache,
                     base_url=req.connection.base_url,
+                    initial_drop_params=seeded_drops,
                 )
                 results.append(result)
                 cost = cost_for_usage(req.connection.model, result.usage_total)

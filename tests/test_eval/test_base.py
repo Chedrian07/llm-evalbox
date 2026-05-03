@@ -152,3 +152,67 @@ def test_wilson_ci_bounds():
     assert 0 <= lo <= 0.5 <= hi <= 1
     lo, hi = _wilson_ci(0, 0)
     assert (lo, hi) == (0.0, 0.0)
+
+
+@pytest.mark.asyncio
+async def test_runtime_adaptive_drop_params(monkeypatch, tmp_path):
+    """Gateway returns 4xx for `seed` on the first call. After parsing it,
+    the run should add `seed` to drop_params, retry, and succeed on every
+    subsequent item without further 4xx — and not persist via the user's
+    learned_capabilities.json (we redirect the path to tmp)."""
+    # Redirect persistence so the test doesn't touch the user's real config.
+    from llm_evalbox.adapters import learned as _learned
+    from llm_evalbox.core.exceptions import BadRequestError
+    monkeypatch.setattr(_learned, "store_path", lambda: tmp_path / "learned.json")
+
+    class _SeedRejectingAdapter(ChatAdapter):
+        name = "seed-rej"
+
+        def __init__(self):
+            super().__init__()
+            self.calls = 0
+            self.fail_calls = 0
+            self.last_drop_params: list[list[str]] = []
+
+        async def chat(self, req):
+            self.calls += 1
+            self.last_drop_params.append(list(req.drop_params))
+            # Until "seed" is in drop_params, reject. After learning, succeed.
+            if "seed" not in req.drop_params:
+                self.fail_calls += 1
+                raise BadRequestError(
+                    'HTTP 400: {"detail":"Unsupported parameter: seed"}',
+                    status_code=400,
+                )
+            return ChatResponse(
+                text="B", raw_text="B",
+                usage=Usage(prompt_tokens=10, completion_tokens=1, total_tokens=11),
+                latency_ms=3.0,
+            )
+
+        async def list_models(self): return []
+
+    items = [
+        {"id": str(i), "question": f"q{i}", "choices": ["A", "B", "C", "D"],
+         "answer": "B", "subject": "x"}
+        for i in range(4)
+    ]
+    bench = _MiniMC()
+    adapter = _SeedRejectingAdapter()
+
+    r = await bench.run(adapter, items, model="probe-m", concurrency=2, thinking="off")
+
+    # Every item ended ok (1 retry per failed item, then learned drop sticks).
+    assert r.error_breakdown.get("ok") == 4
+    assert r.accuracy == pytest.approx(1.0)
+    # Result surfaces the learned key.
+    assert "seed" in r.learned_drop_params
+    # The first call had no `seed` drop; later calls all do.
+    assert any("seed" not in d for d in adapter.last_drop_params[:2])
+    assert all("seed" in d for d in adapter.last_drop_params[2:])
+    # Persistence: file should now hold seed for probe-m.
+    persisted = tmp_path / "learned.json"
+    assert persisted.exists()
+    import json as _json
+    data = _json.loads(persisted.read_text())
+    assert "seed" in data["models"]["probe-m"]["drop_params"]

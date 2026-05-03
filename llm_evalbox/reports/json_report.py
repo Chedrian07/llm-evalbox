@@ -67,6 +67,7 @@ def _benchmark_to_dict(b: BenchmarkResult, *, cost: float | None) -> dict[str, A
         "denominator_policy": b.denominator_policy,
         "cache_hits": sum(1 for q in b.questions if q.cache_hit),
         "prompt_cache_hit_rate": round(rate, 4),
+        "learned_drop_params": list(b.learned_drop_params),
     }
 
 

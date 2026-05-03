@@ -49,6 +49,9 @@ def test_user_drop_params_force_strip():
     ("unknown argument: presence_penalty", {"presence_penalty"}),
     ("invalid value for 'temperature' must be between 0 and 1", {"temperature"}),
     ('parameter "frequency_penalty" is not supported', {"frequency_penalty"}),
+    # cliproxy / OpenAI Responses literal wording
+    ("HTTP 400: {\"detail\":\"Unsupported parameter: seed\"}", {"seed"}),
+    ("Unsupported parameters: top_k", {"top_k"}),
     # gpt-5.4-mini specific: maps the value back to reasoning_effort
     ("level \"minimal\" not supported, valid levels: low, medium, high, xhigh",
      {"reasoning_effort"}),

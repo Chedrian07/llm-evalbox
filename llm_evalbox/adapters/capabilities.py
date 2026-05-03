@@ -152,6 +152,9 @@ _Q = r"[\\'\"`]*"
 
 _UNSUPPORTED_PARAM_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(rf"unrecognized\s+parameter[s]?:?\s*{_Q}(\w+){_Q}", re.I),
+    # cliproxy / OpenAI Responses: 'Unsupported parameter: seed', also
+    # 'Unsupported parameters: top_k'.
+    re.compile(rf"unsupported\s+parameter[s]?:?\s*{_Q}(\w+){_Q}", re.I),
     re.compile(rf"{_Q}(\w+){_Q}\s+is\s+not\s+(?:supported|allowed|recognized)", re.I),
     re.compile(rf"unknown\s+(?:argument|key|parameter|field):\s*{_Q}(\w+){_Q}", re.I),
     re.compile(rf"invalid\s+value\s+for\s+{_Q}(\w+){_Q}", re.I),
