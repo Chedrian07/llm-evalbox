@@ -11,12 +11,16 @@ import { useApp } from "@/lib/store";
 export function App() {
   const { t } = useTranslation();
   const stage = useApp((s) => s.stage);
+  const hydrated = useApp((s) => s.hydrated);
   const hydrateFromServer = useApp((s) => s.hydrateFromServer);
 
   // Pull defaults from /api/defaults once at mount so values surfaced by
   // `evalbox web` (with .env loaded) populate the connection / options
   // inputs instead of the OpenAI public defaults baked into the store.
+  // Guarded by `hydrated` so React StrictMode / HMR re-runs don't clobber
+  // user edits.
   useEffect(() => {
+    if (hydrated) return;
     api.defaults().then(hydrateFromServer).catch(() => {
       // Backend down or older build — keep the static defaults.
     });

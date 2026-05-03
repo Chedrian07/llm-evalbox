@@ -78,7 +78,19 @@ block.
 ```bash
 pip install -e ".[web]"
 evalbox web                        # opens http://127.0.0.1:8765 in your browser
+evalbox web --env-file .env.local  # load a non-default dotenv file first
 ```
+
+`evalbox web` auto-loads `.env` from the current directory, then exposes the
+non-secret values via `GET /api/defaults`. The SPA hydrates its connection /
+options inputs from that endpoint, so anything you set in `.env`
+(`EVALBOX_BASE_URL`, `EVALBOX_MODEL`, `EVALBOX_THINKING`,
+`EVALBOX_CONCURRENCY`, `EVALBOX_MAX_COST_USD`, `EVALBOX_REASONING_EFFORT`,
+`EVALBOX_STRICT_FAILURES`, `EVALBOX_PROMPT_CACHE_AWARE`,
+`EVALBOX_ACCEPT_CODE_EXEC`, …) shows up in the UI immediately. API key
+**values** are never returned — only `has_api_key` / `api_keys` so the UI
+can show a "✓ $OPENAI_API_KEY" hint and let the backend resolve the key
+server-side per request.
 
 The web UI is a single-page app (Setup → Running → Results). All UI text is
 i18n'd (Korean default + English).

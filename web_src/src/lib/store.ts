@@ -25,9 +25,13 @@ interface AppState {
   apiKeyEnv: string;
   conn: ConnectionResponse | null;
   capability: CapabilityInfo | null;
-  /** True when the server says an API key is available in env — the SPA can
-      hide the key input and the backend resolves it server-side per request. */
+  /** True when the server says an API key is available in env for the
+      currently selected `apiKeyEnv` — the SPA can hide the key input and
+      the backend resolves it server-side per request. */
   hasServerApiKey: boolean;
+  /** Per-env key availability snapshot from /api/defaults — keeps the
+      "key picked up" hint accurate when the user switches `apiKeyEnv`. */
+  serverApiKeys: Record<string, boolean>;
   /** True once we have either tried hydrating from /api/defaults or accepted
       the fallback defaults — used to delay first paint of the connection card. */
   hydrated: boolean;
@@ -48,6 +52,14 @@ interface AppState {
   setAcceptCodeExec: (b: boolean) => void;
   strictFailures: boolean;
   setStrictFailures: (b: boolean) => void;
+  noThinkingRerun: boolean;
+  setNoThinkingRerun: (b: boolean) => void;
+  promptCacheAware: boolean;
+  setPromptCacheAware: (b: boolean) => void;
+  reasoningEffort: string | null;
+  setReasoningEffort: (s: string | null) => void;
+  noCache: boolean;
+  setNoCache: (b: boolean) => void;
   maxCostUsd: number | null;
   setMaxCostUsd: (n: number | null) => void;
 
@@ -81,26 +93,46 @@ export const useApp = create<AppState>((set) => ({
   conn: null,
   capability: null,
   hasServerApiKey: false,
+  serverApiKeys: {},
   hydrated: false,
-  setConnection: (patch) => set(patch),
+  setConnection: (patch) =>
+    set((prev) => {
+      const next: Partial<AppState> = { ...patch };
+      // When the user switches the env-var selector, recompute hasServerApiKey
+      // from the snapshot we got at mount. Without this the badge can show
+      // "key picked up" for an env var that isn't actually set.
+      if (patch.apiKeyEnv && prev.serverApiKeys) {
+        next.hasServerApiKey = !!prev.serverApiKeys[patch.apiKeyEnv];
+      }
+      return next;
+    }),
   setConnResponse: (resp) =>
     set({ conn: resp, capability: resp.capability }),
   hydrateFromServer: (d) =>
-    set((prev) => ({
-      // Each field: prefer the server-supplied value, fall back to the
-      // existing default. We don't override values the user has already
-      // typed (initial mount only).
-      baseUrl: d.base_url ?? prev.baseUrl,
-      model: d.model ?? prev.model,
-      adapter: (d.adapter as AppState["adapter"]) ?? prev.adapter,
-      apiKeyEnv: d.api_key_env ?? prev.apiKeyEnv,
-      thinking: ((d.thinking as AppState["thinking"]) ?? prev.thinking),
-      concurrency: d.concurrency ?? prev.concurrency,
-      maxCostUsd: d.max_cost_usd ?? prev.maxCostUsd,
-      acceptCodeExec: d.accept_code_exec || prev.acceptCodeExec,
-      hasServerApiKey: d.has_api_key,
-      hydrated: true,
-    })),
+    set((prev) => {
+      // Mount-time only: don't overwrite user edits if hydrate runs twice
+      // (e.g. React StrictMode double-effect or HMR). The App.tsx guard
+      // also blocks the second call, but we belt-and-suspenders here.
+      if (prev.hydrated) return {};
+      return {
+        baseUrl: d.base_url ?? prev.baseUrl,
+        model: d.model ?? prev.model,
+        adapter: (d.adapter as AppState["adapter"]) ?? prev.adapter,
+        apiKeyEnv: d.api_key_env ?? prev.apiKeyEnv,
+        thinking: ((d.thinking as AppState["thinking"]) ?? prev.thinking),
+        reasoningEffort: d.reasoning_effort ?? prev.reasoningEffort,
+        concurrency: d.concurrency ?? prev.concurrency,
+        maxCostUsd: d.max_cost_usd ?? prev.maxCostUsd,
+        acceptCodeExec: d.accept_code_exec ?? prev.acceptCodeExec,
+        noCache: d.no_cache ?? prev.noCache,
+        strictFailures: d.strict_failures ?? prev.strictFailures,
+        noThinkingRerun: d.no_thinking_rerun ?? prev.noThinkingRerun,
+        promptCacheAware: d.prompt_cache_aware ?? prev.promptCacheAware,
+        hasServerApiKey: d.has_api_key,
+        serverApiKeys: d.api_keys ?? {},
+        hydrated: true,
+      };
+    }),
 
   selectedBenches: new Set(["mmlu"]),
   toggleBench: (name) =>
@@ -120,6 +152,14 @@ export const useApp = create<AppState>((set) => ({
   setAcceptCodeExec: (b) => set({ acceptCodeExec: b }),
   strictFailures: false,
   setStrictFailures: (b) => set({ strictFailures: b }),
+  noThinkingRerun: false,
+  setNoThinkingRerun: (b) => set({ noThinkingRerun: b }),
+  promptCacheAware: false,
+  setPromptCacheAware: (b) => set({ promptCacheAware: b }),
+  reasoningEffort: null,
+  setReasoningEffort: (s) => set({ reasoningEffort: s }),
+  noCache: false,
+  setNoCache: (b) => set({ noCache: b }),
   maxCostUsd: 5.0,
   setMaxCostUsd: (n) => set({ maxCostUsd: n }),
 

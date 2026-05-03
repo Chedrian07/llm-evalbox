@@ -87,9 +87,9 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
           <div className="space-y-1">
             <Label className="flex items-center justify-between">
               <span>{t("connection.api_key")}</span>
-              {s.hasServerApiKey && (
+              {s.hasServerApiKey && !s.apiKey && (
                 <span className="text-[0.7rem] font-normal text-emerald-500">
-                  ✓ ${s.apiKeyEnv}
+                  {"✓ $"}{s.apiKeyEnv}
                 </span>
               )}
             </Label>
@@ -97,7 +97,7 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
               type="password"
               value={s.apiKey}
               placeholder={
-                s.hasServerApiKey
+                s.hasServerApiKey && !s.apiKey
                   ? `(picked up from ${s.apiKeyEnv} on the server — leave blank to use it)`
                   : t("connection.api_key_placeholder")!
               }

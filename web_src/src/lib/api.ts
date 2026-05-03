@@ -80,17 +80,23 @@ export interface ServerDefaults {
   base_url: string | null;
   model: string | null;
   adapter: string | null;
+  profile: string | null;
   thinking: string | null;
+  reasoning_effort: string | null;
   concurrency: number | null;
   rpm: number | null;
   tpm: number | null;
   max_cost_usd: number | null;
   accept_code_exec: boolean;
   no_cache: boolean;
+  strict_failures: boolean;
+  no_thinking_rerun: boolean;
+  prompt_cache_aware: boolean;
   drop_params: string | null;
   api_key_env: string;
   has_api_key: boolean;
   detected_api_key_envs: string[];
+  api_keys: Record<string, boolean>;
 }
 
 export const api = {
