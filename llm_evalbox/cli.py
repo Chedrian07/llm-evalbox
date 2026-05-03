@@ -513,6 +513,44 @@ def _run_thinking_compare(
                   "(result-off.json + result-on.json)")
 
 
+# ============================================================ web
+@app.command("web", help="Launch the local web UI (FastAPI + bundled SPA).")
+def cmd_web(
+    host: str = typer.Option("127.0.0.1", "--host", envvar="EVALBOX_WEB_HOST"),
+    port: int = typer.Option(8765, "--port", envvar="EVALBOX_WEB_PORT"),
+    no_open: bool = typer.Option(False, "--no-open", help="Don't auto-open the browser."),
+    bind_token: str | None = typer.Option(None, "--bind-token", envvar="EVALBOX_WEB_BIND_TOKEN"),
+    reload: bool = typer.Option(False, "--reload", help="Auto-reload on code changes (dev)."),
+) -> None:
+    # Bind safety: when listening on a non-loopback interface we require a
+    # token so the server isn't immediately exposed to other hosts.
+    if host not in ("127.0.0.1", "::1", "localhost") and not bind_token:
+        console.print(
+            "[red]error:[/red] --host points at a non-loopback interface. "
+            "Set --bind-token (or EVALBOX_WEB_BIND_TOKEN) so the server isn't open."
+        )
+        raise typer.Exit(2)
+
+    try:
+        from llm_evalbox.web.server import run_server
+    except ImportError as e:
+        console.print(
+            "[red]error:[/red] web extras not installed.\n"
+            f"  install with: pip install -e \".[web]\"\n  ({e})"
+        )
+        raise typer.Exit(2) from None
+
+    url = f"http://{host}:{port}"
+    console.print(f"[bold]evalbox web[/bold] {url} (version {__version__})")
+    if not no_open and host in ("127.0.0.1", "localhost"):
+        try:
+            import webbrowser
+            webbrowser.open(url)
+        except Exception:
+            pass
+    run_server(host=host, port=port, bind_token=bind_token, reload=reload)
+
+
 # ============================================================ doctor
 @app.command("doctor", help="Check connection, capability, and thinking detection.")
 def cmd_doctor(
