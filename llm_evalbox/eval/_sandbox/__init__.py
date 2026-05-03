@@ -25,8 +25,13 @@ def run_python_with_check_tiered(
     if eff == "docker":
         from llm_evalbox.eval._sandbox.docker_runner import run_python_with_check_docker
         r = run_python_with_check_docker(code, test_code, entry_point, policy=policy)
-        # Docker not available → fall back to tier1 (loud warning emitted by runner).
         if r.error_kind == "runtime_error" and "docker not available" in (r.stderr or ""):
+            return run_python_with_check(code, test_code, entry_point, policy=policy)
+        return r
+    if eff == "e2b":
+        from llm_evalbox.eval._sandbox.e2b_runner import run_python_with_check_e2b
+        r = run_python_with_check_e2b(code, test_code, entry_point, policy=policy)
+        if r.error_kind == "runtime_error" and "e2b not available" in (r.stderr or ""):
             return run_python_with_check(code, test_code, entry_point, policy=policy)
         return r
     return run_python_with_check(code, test_code, entry_point, policy=policy)
@@ -41,6 +46,12 @@ def run_python_with_stdin_tiered(
         from llm_evalbox.eval._sandbox.docker_runner import run_python_with_stdin_docker
         r = run_python_with_stdin_docker(code, stdin, policy=policy)
         if r.error_kind == "runtime_error" and "docker not available" in (r.stderr or ""):
+            return run_python_with_stdin(code, stdin, policy=policy)
+        return r
+    if eff == "e2b":
+        from llm_evalbox.eval._sandbox.e2b_runner import run_python_with_stdin_e2b
+        r = run_python_with_stdin_e2b(code, stdin, policy=policy)
+        if r.error_kind == "runtime_error" and "e2b not available" in (r.stderr or ""):
             return run_python_with_stdin(code, stdin, policy=policy)
         return r
     return run_python_with_stdin(code, stdin, policy=policy)

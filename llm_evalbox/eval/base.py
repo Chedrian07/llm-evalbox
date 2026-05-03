@@ -148,8 +148,12 @@ class BaseBenchmark(ABC):
         sampling: SamplingOverrides | None,
         thinking_mode: str,
         strict: bool,
+        prompt_cache_aware: bool = False,
     ) -> ChatRequest:
         msgs = self.format_prompt(item)
+        if prompt_cache_aware:
+            from llm_evalbox.eval._cache_aware import PROMPT_CACHE_PREFIX
+            msgs = [Message(role="system", content=PROMPT_CACHE_PREFIX), *msgs]
         kwargs: dict[str, Any] = {}
         if sampling and not strict:
             for k in (
@@ -190,6 +194,7 @@ class BaseBenchmark(ABC):
         sem: asyncio.Semaphore,
         cache: Any | None = None,
         base_url: str = "",
+        prompt_cache_aware: bool = False,
     ) -> tuple[int, dict, ChatResponse | None, str, str]:
         """Run one item.
 
@@ -204,6 +209,7 @@ class BaseBenchmark(ABC):
             sampling=sampling,
             thinking_mode=thinking_mode,
             strict=strict,
+            prompt_cache_aware=prompt_cache_aware,
         )
         prompt_text = "\n".join(m.content for m in req.messages)
 
@@ -281,6 +287,7 @@ class BaseBenchmark(ABC):
         no_thinking_rerun: bool = False,
         cache: Any | None = None,
         base_url: str = "",
+        prompt_cache_aware: bool = False,
     ) -> BenchmarkResult:
         """Run the benchmark. Returns aggregated `BenchmarkResult`.
 
@@ -333,6 +340,7 @@ class BaseBenchmark(ABC):
                     sem=sem,
                     cache=cache,
                     base_url=base_url,
+                    prompt_cache_aware=prompt_cache_aware,
                 )
                 for i in batch_indices
             ]

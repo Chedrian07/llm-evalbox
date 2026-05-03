@@ -33,17 +33,28 @@ export function OptionsCard() {
               onChange={(e) => s.setConcurrency(Math.max(1, parseInt(e.target.value || "1", 10)))}
             />
           </div>
-          <div className="space-y-1">
-            <Label>{t("options.max_cost_usd")}</Label>
-            <Input
-              type="number"
+          <div className="col-span-2 space-y-1">
+            <Label className="flex items-center justify-between">
+              <span>{t("options.max_cost_usd")}</span>
+              <span className="font-mono text-xs text-muted-foreground">
+                {s.maxCostUsd == null ? "∞" : `$${s.maxCostUsd.toFixed(2)}`}
+              </span>
+            </Label>
+            <input
+              type="range"
               min={0}
+              max={50}
               step={0.5}
-              value={s.maxCostUsd ?? ""}
-              onChange={(e) =>
-                s.setMaxCostUsd(e.target.value === "" ? null : parseFloat(e.target.value))
-              }
+              value={s.maxCostUsd ?? 0}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                s.setMaxCostUsd(v === 0 ? null : v);
+              }}
+              className="w-full accent-primary"
             />
+            <div className="flex justify-between text-[0.65rem] text-muted-foreground">
+              <span>$0 (no cap)</span><span>$25</span><span>$50</span>
+            </div>
           </div>
         </div>
         <div className="space-y-2 pt-2">

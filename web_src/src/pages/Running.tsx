@@ -89,11 +89,47 @@ export function RunningPage() {
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
           <Progress value={overallPct} />
           <p className="text-xs text-muted-foreground tabular-nums">
             {totalCurrent} / {totalTotal} ({overallPct.toFixed(0)}%)
           </p>
+          {/* Cumulative cost vs cap. Each `result` SSE event carries the
+              per-bench cost; we sum what we've seen so far. */}
+          {(() => {
+            const costSoFar = benches.reduce(
+              (acc, b) => acc + ((b.result?.cost_usd ?? 0) as number),
+              0,
+            );
+            const cap = s.maxCostUsd;
+            const pct = cap && cap > 0 ? Math.min(100, (costSoFar / cap) * 100) : null;
+            const over = cap != null && cap > 0 && costSoFar >= cap;
+            return (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs tabular-nums">
+                  <span className="text-muted-foreground">
+                    cost so far: <span className={over ? "text-destructive font-semibold" : ""}>
+                      ${costSoFar.toFixed(4)}
+                    </span>
+                    {cap == null ? "" : ` / $${cap.toFixed(2)}`}
+                  </span>
+                  {pct != null && (
+                    <span className={over ? "text-destructive" : "text-muted-foreground"}>
+                      {pct.toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+                {pct != null && (
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className={over ? "h-full bg-destructive" : "h-full bg-emerald-500"}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>

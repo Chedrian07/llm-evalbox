@@ -42,6 +42,9 @@ def _question_to_dict(q: QuestionResult, *, include_raw: bool) -> dict[str, Any]
 
 
 def _benchmark_to_dict(b: BenchmarkResult, *, cost: float | None) -> dict[str, Any]:
+    prompt_t = b.usage_total.prompt_tokens
+    cached_t = b.usage_total.cached_prompt_tokens
+    rate = (cached_t / prompt_t) if prompt_t > 0 else 0.0
     return {
         "name": b.benchmark_name,
         "samples": b.samples,
@@ -63,6 +66,7 @@ def _benchmark_to_dict(b: BenchmarkResult, *, cost: float | None) -> dict[str, A
         "thinking_used": b.thinking_used,
         "denominator_policy": b.denominator_policy,
         "cache_hits": sum(1 for q in b.questions if q.cache_hit),
+        "prompt_cache_hit_rate": round(rate, 4),
     }
 
 

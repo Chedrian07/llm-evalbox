@@ -115,6 +115,7 @@ def cmd_run(
     lcb_cutoff: str | None = typer.Option(None, "--lcb-cutoff", help="LiveCodeBench: keep only items with release_date >= YYYY-MM-DD"),
     no_cache: bool = typer.Option(False, "--no-cache", envvar="EVALBOX_NO_CACHE", help="Disable response cache."),
     resume: bool = typer.Option(False, "--resume", help="Resume an interrupted run from --output-dir/state.json."),
+    prompt_cache_aware: bool = typer.Option(False, "--prompt-cache-aware", help="Prepend a stable system prefix so providers can prompt-cache it. Reports prompt_cache_hit_rate per bench."),
     profile: str | None = typer.Option(None, "--profile"),
     env_file: str | None = typer.Option(None, "--env-file"),
     output_dir: Path | None = typer.Option(None, "--output-dir"),
@@ -196,6 +197,19 @@ def cmd_run(
 
     user_drop = [p.strip() for p in (drop_params or "").split(",") if p.strip()]
 
+    # Merge in anything doctor learned for this model (one-shot lookup; the
+    # user can still override with --drop-params).
+    if eff_model:
+        from llm_evalbox.adapters import lookup_learned
+        learned = lookup_learned(eff_model)
+        if learned:
+            for k in learned:
+                if k not in user_drop:
+                    user_drop.append(k)
+            console.print(
+                f"  [dim]doctor cache: dropping {','.join(learned)} for {eff_model}[/dim]"
+            )
+
     overrides = PriceOverrides(
         input=price_input, output=price_output, cached_input=price_cached, reasoning=price_reasoning,
     )
@@ -231,6 +245,30 @@ def cmd_run(
         run_id = f"evalbox-{started_at.replace(':','-')}-{_slug(eff_model)}"
         run_dir = out_root / run_id
 
+    # Multi-model: comma-separated --model a,b,c. Each runs sequentially into
+    # the same parent run-dir as result-<slug>.json, then we print a side-by-
+    # side compare table at the end.
+    models = [m.strip() for m in (eff_model or "").split(",") if m.strip()]
+    if len(models) > 1:
+        if thinking_compare:
+            console.print("[red]error:[/red] --thinking-compare can't combine with multi-model.")
+            raise typer.Exit(2)
+        _run_multi_model(
+            models=models,
+            base_url=eff_base_url, adapter_kind=eff_adapter,
+            api_key=api_key, extra_headers=headers,
+            benches=benches, samples=eff_samples, concurrency=eff_concurrency,
+            rpm=rpm, tpm=tpm,
+            thinking=eff_thinking, no_thinking_rerun=no_thinking_rerun,
+            sampling=sampling_obj, user_drop=user_drop,
+            strict=eff_strict, strict_failures=strict_failures,
+            no_cache=no_cache, prompt_cache_aware=prompt_cache_aware,
+            run_dir=run_dir, started_at=started_at, seed=eff_seed,
+            save_questions=save_questions, max_cost_usd=max_cost_usd,
+            price_overrides=overrides,
+        )
+        return
+
     if thinking_compare:
         if (thinking or "").lower() == "auto":
             console.print(
@@ -243,6 +281,7 @@ def cmd_run(
             api_key=api_key, extra_headers=headers, benches=benches,
             samples=eff_samples, concurrency=eff_concurrency, rpm=rpm, tpm=tpm,
             no_thinking_rerun=no_thinking_rerun, sampling=sampling_obj,
+            prompt_cache_aware=prompt_cache_aware,
             user_drop=user_drop, strict=eff_strict, strict_failures=strict_failures,
             no_cache=no_cache, run_id=run_id, run_dir=run_dir,
             started_at=started_at, seed=eff_seed, save_questions=save_questions,
@@ -270,6 +309,7 @@ def cmd_run(
             strict_failures=strict_failures,
             no_cache=no_cache,
             resume=resume,
+            prompt_cache_aware=prompt_cache_aware,
             run_id=run_id,
             run_dir=run_dir,
             started_at=started_at,
@@ -301,6 +341,7 @@ async def _run_async(
     strict_failures: bool,
     no_cache: bool,
     resume: bool,
+    prompt_cache_aware: bool,
     run_id: str,
     run_dir: Path,
     started_at: str,
@@ -373,6 +414,7 @@ async def _run_async(
                     no_thinking_rerun=no_thinking_rerun,
                     cache=cache,
                     base_url=base_url,
+                    prompt_cache_aware=prompt_cache_aware,
                 )
                 results.append(result)
 
@@ -445,12 +487,77 @@ async def _run_async(
     return results, costs
 
 
+def _run_multi_model(
+    *,
+    models: list[str],
+    base_url, adapter_kind, api_key, extra_headers,
+    benches, samples, concurrency, rpm, tpm,
+    thinking, no_thinking_rerun,
+    sampling, user_drop, strict, strict_failures,
+    no_cache, prompt_cache_aware,
+    run_dir, started_at, seed, save_questions,
+    max_cost_usd, price_overrides,
+):
+    """Run the same bench list for multiple models, sequentially. Each
+    model's result.json lands in the same parent run-dir under
+    `result-<slug>.json`. We re-instantiate benches per model so their
+    few-shot caches don't carry over."""
+    bench_classes = [type(b) for b in benches]
+
+    def _fresh():
+        out = []
+        for cls in bench_classes:
+            inst = cls()
+            v = getattr(benches[0] if benches else None, "cutoff", None)
+            if v is not None and hasattr(inst, "cutoff"):
+                inst.cutoff = v
+            out.append(inst)
+        return out
+
+    payloads: list[dict] = []
+    for m in models:
+        slug = _slug(m)
+        console.rule(f"[bold]model = {m}[/bold]")
+        # Each model gets its own run-id under the parent run-dir.
+        sub_run_id = f"{run_dir.name}-{slug}"
+        _results, _costs = asyncio.run(
+            _run_async(
+                base_url=base_url, model=m, adapter_kind=adapter_kind,
+                api_key=api_key, extra_headers=extra_headers, benches=_fresh(),
+                samples=samples, concurrency=concurrency, rpm=rpm, tpm=tpm,
+                thinking=thinking, no_thinking_rerun=no_thinking_rerun,
+                sampling=sampling, user_drop=user_drop,
+                strict=strict, strict_failures=strict_failures,
+                no_cache=no_cache, resume=False, prompt_cache_aware=prompt_cache_aware,
+                run_id=sub_run_id, run_dir=run_dir,
+                started_at=_utc_now_iso(), seed=seed,
+                save_questions=save_questions, max_cost_usd=max_cost_usd,
+                price_overrides=price_overrides,
+                result_filename=f"result-{slug}.json",
+                questions_filename=f"result.questions-{slug}.jsonl",
+                print_table=True,
+            )
+        )
+        # Read the just-written file to feed compare_md.
+        import json as _json
+        with open(run_dir / f"result-{slug}.json", encoding="utf-8") as f:
+            payloads.append(_json.load(f))
+
+    console.print()
+    console.rule("[bold]models compared[/bold]")
+    from llm_evalbox.reports import render_compare_md
+    md = render_compare_md(payloads)
+    console.print(md)
+    console.print(f"\nresults written to: [bold]{run_dir}[/bold] "
+                  f"(result-<slug>.json for each model)")
+
+
 def _run_thinking_compare(
     *,
     base_url, model, adapter_kind, api_key, extra_headers, benches,
     samples, concurrency, rpm, tpm,
     no_thinking_rerun, sampling, user_drop, strict, strict_failures,
-    no_cache,
+    no_cache, prompt_cache_aware,
     run_id, run_dir, started_at, seed, save_questions,
     max_cost_usd, price_overrides,
 ):
@@ -481,7 +588,7 @@ def _run_thinking_compare(
             thinking="off", no_thinking_rerun=no_thinking_rerun,
             sampling=sampling, user_drop=user_drop,
             strict=strict, strict_failures=strict_failures,
-            no_cache=no_cache, resume=False,
+            no_cache=no_cache, resume=False, prompt_cache_aware=prompt_cache_aware,
             run_id=run_id, run_dir=run_dir, started_at=started_at, seed=seed,
             save_questions=save_questions, max_cost_usd=max_cost_usd,
             price_overrides=price_overrides,
@@ -500,7 +607,7 @@ def _run_thinking_compare(
             thinking="on", no_thinking_rerun=no_thinking_rerun,
             sampling=sampling, user_drop=user_drop,
             strict=strict, strict_failures=strict_failures,
-            no_cache=no_cache, resume=False,
+            no_cache=no_cache, resume=False, prompt_cache_aware=prompt_cache_aware,
             run_id=run_id, run_dir=run_dir, started_at=_utc_now_iso(), seed=seed,
             save_questions=save_questions, max_cost_usd=max_cost_usd,
             price_overrides=price_overrides,
@@ -649,11 +756,13 @@ async def _doctor_async(base_url: str, model: str, adapter_kind: str, api_key: s
                           f"completion={resp.usage.completion_tokens} "
                           f"reasoning={resp.usage.reasoning_tokens}")
         if drop_params:
+            from llm_evalbox.adapters import remember_learned
+            remember_learned(model, drop_params)
             console.print(
                 f"  [bold yellow]learned drop_params:[/bold yellow] "
                 f"{','.join(drop_params)}  "
-                f"(re-use via --drop-params {','.join(drop_params)} or "
-                f"EVALBOX_DROP_PARAMS={','.join(drop_params)})"
+                f"(persisted to ~/.config/llm-evalbox/learned_capabilities.json — "
+                f"future runs will strip them automatically)"
             )
     finally:
         await adapter.close()
@@ -762,6 +871,112 @@ def cmd_cache_clear(yes: bool = typer.Option(False, "--yes", "-y")) -> None:
     import shutil
     shutil.rmtree(root)
     console.print(f"removed {root}")
+
+
+# ============================================================ import
+@app.command("import", help="Fetch a shared run by URL or hash and print its summary.")
+def cmd_import(
+    url_or_hash: str = typer.Argument(..., help="Full /api/shares/<hash> URL, or just the hash."),
+    save_to: Path | None = typer.Option(None, "--save-to", help="Write fetched result.json here."),
+) -> None:
+    """Fetch a shared run.
+
+    Accepts either a full URL (e.g. http://host/api/shares/abc123) or a bare
+    hash (looks up the local cache at ~/.cache/llm-evalbox/shares/<hash>.json).
+    """
+    import json as _json
+
+    from llm_evalbox.cache.store import cache_root
+
+    arg = url_or_hash.strip()
+    payload = None
+    if arg.startswith("http://") or arg.startswith("https://"):
+        import httpx
+        try:
+            r = httpx.get(arg, timeout=15.0, follow_redirects=True)
+            r.raise_for_status()
+            payload = r.json()
+        except (httpx.HTTPError, ValueError) as e:
+            console.print(f"[red]error:[/red] {e}")
+            raise typer.Exit(1) from None
+    else:
+        # Treat as a bare hash; look in the local share dir.
+        share_path = cache_root() / "shares" / f"{arg}.json"
+        if not share_path.exists():
+            console.print(f"[red]error:[/red] no local share at {share_path}")
+            console.print("  Pass a full URL or run the producer's `evalbox web` to seed the cache.")
+            raise typer.Exit(2)
+        with open(share_path, encoding="utf-8") as f:
+            payload = _json.load(f)
+
+    if not isinstance(payload, dict):
+        console.print("[red]error:[/red] shared payload is not a JSON object")
+        raise typer.Exit(1)
+
+    p = payload.get("provider", {}) or {}
+    totals = payload.get("totals", {}) or {}
+    benches = payload.get("benchmarks", []) or []
+    console.print(f"[bold]imported share[/bold] — {p.get('model','?')} @ {p.get('base_url','?')}")
+    console.print(f"  schema_version={payload.get('schema_version','?')}, run_id={payload.get('run_id','?')}")
+    cost_value = totals.get("cost_usd_estimated")
+    cost_str = f"${cost_value:.4f}" if cost_value is not None else "—"
+    console.print(
+        f"  benchmarks={len(benches)}, macro={totals.get('accuracy_macro', 0):.4f}, "
+        f"cost={cost_str}"
+    )
+
+    bench_names = [b.get("name") for b in benches if b.get("name")]
+    if bench_names and p.get("model"):
+        # Reproduce hint
+        bench_csv = ",".join(bench_names)
+        console.print("\n[bold]reproduce locally[/bold]:")
+        console.print(
+            f"  evalbox run --base-url {p.get('base_url','<your-base>')} "
+            f"--model {p.get('model')} --bench {bench_csv} --samples 200"
+        )
+
+    if save_to:
+        save_to.parent.mkdir(parents=True, exist_ok=True)
+        save_to.write_text(_json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        console.print(f"\nsaved to: [bold]{save_to}[/bold]")
+
+
+# ============================================================ capabilities
+capabilities_app = typer.Typer(
+    help="Inspect / forget the doctor-learned capabilities cache "
+         "(~/.config/llm-evalbox/learned_capabilities.json).",
+)
+app.add_typer(capabilities_app, name="capabilities")
+
+
+@capabilities_app.command("ls", help="List learned drop_params per model.")
+def cmd_capabilities_ls() -> None:
+    from llm_evalbox.adapters import list_learned
+    rows = list_learned()
+    if not rows:
+        console.print("(empty — run `evalbox doctor` against a model that rejects keys)")
+        return
+    for r in rows:
+        console.print(f"  {r['model']:30s}  drop={','.join(r['drop_params']):40s}  {r.get('learned_at','')}")
+
+
+@capabilities_app.command("forget", help="Delete the entry for one model.")
+def cmd_capabilities_forget(model: str) -> None:
+    from llm_evalbox.adapters import forget_learned
+    if forget_learned(model):
+        console.print(f"forgot {model}")
+    else:
+        console.print(f"(no entry for {model})")
+        raise typer.Exit(1)
+
+
+@capabilities_app.command("clear", help="Wipe all learned entries (interactive).")
+def cmd_capabilities_clear(yes: bool = typer.Option(False, "--yes", "-y")) -> None:
+    if not yes and not typer.confirm("Wipe all learned capability entries?"):
+        raise typer.Exit(1)
+    from llm_evalbox.adapters import clear_learned
+    n = clear_learned()
+    console.print(f"removed {n} entries")
 
 
 # ============================================================ compare
