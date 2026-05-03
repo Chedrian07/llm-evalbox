@@ -36,6 +36,7 @@ class RunState:
     queue: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
     task: asyncio.Task | None = None
     final_payload: dict[str, Any] | None = None
+    messages: list[dict[str, Any]] = field(default_factory=list)
     cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
 
 

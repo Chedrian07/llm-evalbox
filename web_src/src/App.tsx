@@ -28,16 +28,16 @@ export function App() {
   }, []);
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b">
-        <div className="container flex items-center justify-between py-3">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-muted/20">
+      <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
+        <div className="container flex flex-col gap-3 py-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <span className="text-base font-semibold tracking-tight">{t("app.title")}</span>
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {t("app.subtitle")}
             </span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             <StageBadge stage="setup" current={stage} />
             <span className="text-muted-foreground/50">→</span>
             <StageBadge stage="running" current={stage} />
@@ -49,7 +49,7 @@ export function App() {
           </div>
         </div>
       </header>
-      <main className="container py-5">
+      <main className="container py-4 md:py-5">
         {stage === "setup" && <SetupPage />}
         {stage === "running" && <RunningPage />}
         {stage === "results" && <ResultsPage />}

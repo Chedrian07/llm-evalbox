@@ -9,13 +9,14 @@ import { ConnectionCard } from "@/components/connection-card";
 import { AnswerDiff } from "@/components/charts/answer-diff";
 import { CostVsAccuracyChart } from "@/components/charts/cost-vs-accuracy";
 import { RadarChartComparison } from "@/components/charts/radar-chart";
+import { RunMessages } from "@/components/run-messages";
 import { RunHistorySidebar } from "@/components/run-history-sidebar";
 import { api, type BenchmarkResult, type RunResult } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { listMergedHistory, saveHistory, type HistoryEntry } from "@/lib/history";
 import { fmtAcc, fmtCost, fmtMs, fmtNum } from "@/lib/format";
 
-type Tab = "matrix" | "radar" | "scatter" | "diff" | "raw";
+type Tab = "matrix" | "radar" | "scatter" | "diff" | "messages" | "raw";
 
 export function ResultsPage() {
   const { t } = useTranslation();
@@ -96,6 +97,7 @@ export function ResultsPage() {
                 <TabBtn label={t("results.radar")} on={tab === "radar"} onClick={() => setTab("radar")} />
                 <TabBtn label={t("results.scatter")} on={tab === "scatter"} onClick={() => setTab("scatter")} />
                 <TabBtn label={t("results.diff")} on={tab === "diff"} onClick={() => setTab("diff")} />
+                <TabBtn label={t("results.messages")} on={tab === "messages"} onClick={() => setTab("messages")} />
                 <TabBtn label={t("results.raw")} on={tab === "raw"} onClick={() => setTab("raw")} />
                 <Button size="sm" variant="outline" onClick={() => exportFile("md")}>
                   <Download className="h-3 w-3" /> .md
@@ -142,6 +144,8 @@ export function ResultsPage() {
                   <CostVsAccuracyChart runs={history} />
                 ) : tab === "diff" ? (
                   <AnswerDiff runs={history} />
+                ) : tab === "messages" ? (
+                  <RunMessages messages={r.messages ?? []} empty={t("run.no_messages")!} limit={200} />
                 ) : (
                   <pre className="overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed">
                     {JSON.stringify(r, null, 2)}
@@ -283,6 +287,15 @@ function renderRunMd(r: RunResult): string {
   for (const b of r.benchmarks ?? []) {
     const cost = b.cost_usd_estimated == null ? "—" : `$${b.cost_usd_estimated.toFixed(4)}`;
     lines.push(`| ${b.name} | ${b.samples} | ${(b.accuracy ?? 0).toFixed(4)} | ${cost} |`);
+  }
+  if (r.messages?.length) {
+    lines.push("");
+    lines.push("## Messages");
+    lines.push("");
+    for (const message of r.messages) {
+      const at = message.created_at ? ` ${message.created_at}` : "";
+      lines.push(`- \`${message.role}\`${at}: ${message.content}`);
+    }
   }
   return lines.join("\n") + "\n";
 }

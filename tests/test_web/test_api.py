@@ -220,6 +220,11 @@ async def test_runs_lifecycle():
         assert detail["status"] == "completed", detail
         assert detail["result"] is not None
         assert detail["result"]["benchmarks"][0]["name"] == "mmlu"
+        assert detail["messages"]
+        assert detail["result"]["messages"] == detail["messages"]
+        assert detail["result"]["messages"][0]["role"] == "system"
+        assert any(m["metadata"]["type"] == "progress" for m in detail["result"]["messages"])
+        assert any(m["metadata"]["type"] == "done" for m in detail["result"]["messages"])
 
 
 @pytest.mark.asyncio

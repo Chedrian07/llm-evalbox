@@ -99,6 +99,13 @@ export interface BenchmarkResult {
   learned_drop_params?: string[];
 }
 
+export interface RunMessage {
+  role: string;
+  content: string;
+  created_at?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface RunResult {
   schema_version: number;
   run_id: string;
@@ -122,6 +129,7 @@ export interface RunResult {
     };
     cost_usd_estimated?: number | null;
   };
+  messages?: RunMessage[];
 }
 
 export interface RunDetail {
@@ -129,6 +137,7 @@ export interface RunDetail {
   status: string;
   started_at: string;
   finished_at: string | null;
+  messages?: RunMessage[];
   result: RunResult | null;
 }
 

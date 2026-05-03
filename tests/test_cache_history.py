@@ -42,6 +42,14 @@ def _payload(run_id: str, model: str, acc: float = 0.85, cost: float | None = 0.
             "tokens": {"prompt": 1, "completion": 1, "reasoning": 0, "cached_prompt": 0},
             "cost_usd_estimated": cost,
         },
+        "messages": [
+            {
+                "role": "system",
+                "content": "run started",
+                "created_at": "2026-05-03T00:00:00Z",
+                "metadata": {"type": "status", "phase": "started"},
+            },
+        ],
     }
 
 
@@ -67,6 +75,7 @@ def test_get_run_returns_full_payload():
     assert payload is not None
     assert payload["run_id"] == "evalbox-a"
     assert payload["benchmarks"][0]["accuracy"] == pytest.approx(0.85)
+    assert payload["messages"][0]["content"] == "run started"
 
 
 def test_get_run_unknown():

@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionCard } from "@/components/connection-card";
 import { Progress } from "@/components/ui/progress";
-import { api } from "@/lib/api";
+import { RunMessages } from "@/components/run-messages";
+import { api, type RunMessage } from "@/lib/api";
 import { subscribeRun } from "@/lib/sse";
 import { useApp } from "@/lib/store";
 import { fmtAcc, fmtCost } from "@/lib/format";
@@ -22,7 +23,7 @@ export function RunningPage() {
   const s = useApp();
   const [series, setSeries] = useState<AccumPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [events, setEvents] = useState<string[]>([]);
+  const [messages, setMessages] = useState<RunMessage[]>([]);
   const [now, setNow] = useState(Date.now());
   const [startedAt] = useState(Date.now());
 
@@ -34,10 +35,10 @@ export function RunningPage() {
   useEffect(() => {
     if (!s.runId) return;
     const unsub = subscribeRun(s.runId, {
+      onAny: (_type, data) => {
+        pushMessage(setMessages, data);
+      },
       onProgress: (data) => {
-        if (data.phase === "loading") {
-          pushEvent(setEvents, `${data.bench}: ${t("run.loading")}`);
-        }
         s.updateBenchProgress(data.bench, {
           current: data.current,
           total: data.total,
@@ -54,24 +55,29 @@ export function RunningPage() {
         });
       },
       onResult: (data) => {
-        pushEvent(setEvents, `${data.bench}: ${t("run.completed")}`);
         s.updateBenchProgress(data.bench, {
           done: true,
           result: data.data,
         });
       },
       onDone: async () => {
-        pushEvent(setEvents, t("run.finalizing"));
         try {
           const detail = await api.getRun(s.runId!);
-          s.setFinalResult(detail.result ?? null);
+          s.setFinalResult(detail.result
+            ? { ...detail.result, messages: detail.result.messages ?? detail.messages ?? [] }
+            : null);
           s.setStage("results");
         } catch (e) {
           setError(e instanceof Error ? e.message : String(e));
         }
       },
       onError: (data) => {
-        pushEvent(setEvents, data.message ?? "stream error");
+        if (!data?.type) {
+          pushMessage(setMessages, {
+            type: "error",
+            message: data.message ?? "stream error",
+          });
+        }
         setError(data.message ?? "stream error");
       },
     });
@@ -106,128 +112,160 @@ export function RunningPage() {
         <RunStat label={t("run.active_benches")} value={String(benches.filter((b) => !b.done).length || benches.length)} detail={benches.some((b) => b.thinking_used) ? t("run.thinking_on") : s.thinking} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>{t("stage.running")}</span>
-            <div className="flex items-center gap-2">
-              {benches.some((b) => b.thinking_used) && (
-                <Badge variant="success">{t("run.thinking_on")}</Badge>
-              )}
-              <Button size="sm" variant="destructive" onClick={cancel}>
-                {t("run.cancel")}
-              </Button>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Progress value={overallPct} />
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {totalCurrent} / {totalTotal} ({overallPct.toFixed(0)}%)
-          </p>
-          {/* Cumulative cost vs cap. Each `result` SSE event carries the
-              per-bench cost; we sum what we've seen so far. */}
-          {(() => {
-            const cap = s.maxCostUsd;
-            const pct = cap && cap > 0 ? Math.min(100, (costSoFar / cap) * 100) : null;
-            const over = cap != null && cap > 0 && costSoFar >= cap;
-            return (
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs tabular-nums">
-                  <span className="text-muted-foreground">
-                    cost so far: <span className={over ? "text-destructive font-semibold" : ""}>
-                      ${costSoFar.toFixed(4)}
-                    </span>
-                    {cap == null ? "" : ` / $${cap.toFixed(2)}`}
-                  </span>
-                  {pct != null && (
-                    <span className={over ? "text-destructive" : "text-muted-foreground"}>
-                      {pct.toFixed(0)}%
-                    </span>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>{t("stage.running")}</span>
+                <div className="flex items-center gap-2">
+                  {benches.some((b) => b.thinking_used) && (
+                    <Badge variant="success">{t("run.thinking_on")}</Badge>
                   )}
+                  <Button size="sm" variant="destructive" onClick={cancel}>
+                    {t("run.cancel")}
+                  </Button>
                 </div>
-                {pct != null && (
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className={over ? "h-full bg-destructive" : "h-full bg-emerald-500"}
-                      style={{ width: `${pct}%` }}
-                    />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Progress value={overallPct} />
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {totalCurrent} / {totalTotal} ({overallPct.toFixed(0)}%)
+              </p>
+              {/* Cumulative cost vs cap. Each `result` SSE event carries the
+                  per-bench cost; we sum what we've seen so far. */}
+              {(() => {
+                const cap = s.maxCostUsd;
+                const pct = cap && cap > 0 ? Math.min(100, (costSoFar / cap) * 100) : null;
+                const over = cap != null && cap > 0 && costSoFar >= cap;
+                return (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs tabular-nums">
+                      <span className="text-muted-foreground">
+                        cost so far: <span className={over ? "text-destructive font-semibold" : ""}>
+                          ${costSoFar.toFixed(4)}
+                        </span>
+                        {cap == null ? "" : ` / $${cap.toFixed(2)}`}
+                      </span>
+                      {pct != null && (
+                        <span className={over ? "text-destructive" : "text-muted-foreground"}>
+                          {pct.toFixed(0)}%
+                        </span>
+                      )}
+                    </div>
+                    {pct != null && (
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                        <div
+                          className={over ? "h-full bg-destructive" : "h-full bg-emerald-500"}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
+                );
+              })()}
+              {error && <p className="text-sm text-destructive">{error}</p>}
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("benches.title")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {benches.map((b) => (
+                  <div key={b.bench} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{b.bench}</span>
+                      <span className="text-muted-foreground tabular-nums">
+                        {b.current}/{b.total} · acc={fmtAcc(b.running_accuracy)}
+                        {b.done && " ✓"}
+                      </span>
+                    </div>
+                    <Progress value={b.total > 0 ? (b.current / b.total) * 100 : 0} />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("run.running_accuracy")}</CardTitle>
+              </CardHeader>
+              <CardContent className="h-64">
+                {series.length > 1 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={series}>
+                      <CartesianGrid strokeOpacity={0.1} />
+                      <XAxis dataKey="done" stroke="currentColor" fontSize={12} />
+                      <YAxis domain={[0, 1]} stroke="currentColor" fontSize={12} />
+                      <Tooltip
+                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
+                      />
+                      <Line type="monotone" dataKey="acc" stroke="hsl(var(--primary))" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-sm text-muted-foreground">…</p>
                 )}
-              </div>
-            );
-          })()}
-          {error && <p className="text-sm text-destructive">{error}</p>}
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("benches.title")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {benches.map((b) => (
-              <div key={b.bench} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{b.bench}</span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {b.current}/{b.total} · acc={fmtAcc(b.running_accuracy)}
-                    {b.done && " ✓"}
-                  </span>
-                </div>
-                <Progress value={b.total > 0 ? (b.current / b.total) * 100 : 0} />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("run.running_accuracy")}</CardTitle>
-          </CardHeader>
-          <CardContent className="h-64">
-            {series.length > 1 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={series}>
-                  <CartesianGrid strokeOpacity={0.1} />
-                  <XAxis dataKey="done" stroke="currentColor" fontSize={12} />
-                  <YAxis domain={[0, 1]} stroke="currentColor" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
-                  />
-                  <Line type="monotone" dataKey="acc" stroke="hsl(var(--primary))" dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-sm text-muted-foreground">…</p>
-            )}
-          </CardContent>
-        </Card>
+        <aside className="xl:sticky xl:top-20 xl:self-start">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("run.messages")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RunMessages messages={messages} empty="—" />
+            </CardContent>
+          </Card>
+        </aside>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("run.events")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {events.length === 0 ? (
-            <p className="text-sm text-muted-foreground">—</p>
-          ) : (
-            <ol className="space-y-1 text-xs text-muted-foreground">
-              {events.map((event, i) => (
-                <li key={`${event}-${i}`}>{event}</li>
-              ))}
-            </ol>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
-function pushEvent(setEvents: Dispatch<SetStateAction<string[]>>, message: string) {
-  setEvents((prev) => [`${new Date().toLocaleTimeString()} · ${message}`, ...prev].slice(0, 12));
+function pushMessage(
+  setMessages: Dispatch<SetStateAction<RunMessage[]>>,
+  event: any,
+) {
+  const message = runMessageFromEvent(event);
+  if (!message) return;
+  setMessages((prev) => [...prev, message].slice(-80));
+}
+
+function runMessageFromEvent(event: any): RunMessage | null {
+  if (!event || event.type === "ping") return null;
+  const type = String(event.type ?? "message");
+  const created_at = event.created_at ?? new Date().toISOString();
+  const content = typeof event.message === "string"
+    ? event.message
+    : fallbackMessageContent(event);
+  const metadata = Object.fromEntries(
+    Object.entries(event).filter(([key]) => key !== "message" && key !== "created_at"),
+  );
+  return {
+    role: type === "result" || type === "done" ? "assistant" : "system",
+    content,
+    created_at,
+    metadata,
+  };
+}
+
+function fallbackMessageContent(event: any): string {
+  if (event.type === "progress") {
+    if (event.phase === "loading") return `${event.bench}: loading dataset`;
+    return `${event.bench}: ${event.current ?? 0}/${event.total ?? "?"}`;
+  }
+  if (event.type === "result") return `${event.bench}: completed`;
+  if (event.type === "done") return "run completed";
+  if (event.type === "error") return event.message ?? "run error";
+  return String(event.type ?? "message");
 }
 
 function RunStat({ label, value, detail }: { label: string; value: string; detail: string }) {

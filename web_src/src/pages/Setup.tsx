@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Play } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { BenchmarkGrid } from "@/components/benchmark-grid";
 import { ConnectionCard } from "@/components/connection-card";
@@ -67,38 +67,43 @@ export function SetupPage() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-      <div className="space-y-4">
-        <ConnectionCard />
-        <ThinkingToggle />
-        <BenchmarkGrid />
-      </div>
-      <div className="space-y-4">
-        <OptionsCard />
-        <CostPreview />
-        <RunPlanCard />
-        <Button
-          size="lg"
-          onClick={start}
-          disabled={blocked || busy || !s.baseUrl.trim() || !s.model.trim()}
-          className="w-full"
-        >
-          <Play className="h-4 w-4" />
-          {busy ? t("run.starting") : t("run.start")}
-        </Button>
-        {err && <p className="text-xs text-destructive">{err}</p>}
-        {noBenches && (
-          <p className="text-xs text-muted-foreground">{t("run.no_benches")}</p>
-        )}
-        {codeBlocked && (
-          <p className="text-xs text-destructive">{t("run.code_consent_required")}</p>
-        )}
+    <div className="space-y-4">
+      <ConnectionCard />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <section className="min-w-0">
+          <BenchmarkGrid />
+        </section>
+
+        <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start">
+          <RunPlanCard>
+            <Button
+              size="lg"
+              onClick={start}
+              disabled={blocked || busy || !s.baseUrl.trim() || !s.model.trim()}
+              className="w-full"
+            >
+              <Play className="h-4 w-4" />
+              {busy ? t("run.starting") : t("run.start")}
+            </Button>
+            {err && <p className="text-xs text-destructive">{err}</p>}
+            {noBenches && (
+              <p className="text-xs text-muted-foreground">{t("run.no_benches")}</p>
+            )}
+            {codeBlocked && (
+              <p className="text-xs text-destructive">{t("run.code_consent_required")}</p>
+            )}
+          </RunPlanCard>
+          <CostPreview />
+          <ThinkingToggle />
+          <OptionsCard />
+        </aside>
       </div>
     </div>
   );
 }
 
-function RunPlanCard() {
+function RunPlanCard({ children }: { children?: ReactNode }) {
   const { t } = useTranslation();
   const s = useApp();
   const selected = [...s.selectedBenches];
@@ -116,7 +121,8 @@ function RunPlanCard() {
       <CardHeader>
         <CardTitle>{t("plan.title")}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+      <CardContent className="space-y-4 text-sm">
+        {children && <div className="space-y-2">{children}</div>}
         <div className="grid grid-cols-2 gap-2">
           <PlanMetric label={t("plan.benchmarks")} value={selected.length.toLocaleString()} />
           <PlanMetric label={t("plan.samples")} value={String(sampleLabel)} />

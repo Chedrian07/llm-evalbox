@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -65,13 +66,23 @@ def get_run(run_id: str) -> dict[str, Any]:
         "status": state.status,
         "started_at": state.started_at,
         "finished_at": state.finished_at,
+        "messages": state.messages,
         "result": state.final_payload,
     }
 
 
 @router.delete("/api/runs/{run_id}")
 async def cancel_run(run_id: str) -> dict[str, str]:
-    ok = await get_registry().cancel(run_id)
+    registry = get_registry()
+    state = registry.get(run_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    await _emit(state, {
+        "type": "status",
+        "phase": "cancelled",
+        "message": "run cancelled",
+    })
+    ok = await registry.cancel(run_id)
     if not ok:
         raise HTTPException(status_code=404, detail="run not found")
     return {"status": "cancelled"}
@@ -101,12 +112,100 @@ async def run_events(run_id: str, request: Request) -> EventSourceResponse:
 
 
 # -------------------------------------------------------- background runner
-async def _emit(state: RunState, payload: dict[str, Any]) -> None:
-    await state.queue.put(payload)
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _event_content(payload: dict[str, Any]) -> str:
+    explicit = payload.get("message")
+    if explicit:
+        return str(explicit)
+
+    event_type = str(payload.get("type", "message"))
+    bench = payload.get("bench")
+    if event_type == "progress":
+        phase = payload.get("phase")
+        if phase == "loading":
+            return f"{bench}: loading dataset"
+        current = payload.get("current", 0)
+        total = payload.get("total", "?")
+        parts = [f"{bench}: {current}/{total}"]
+        acc = payload.get("running_accuracy")
+        if isinstance(acc, (int, float)):
+            parts.append(f"acc={acc:.4f}")
+        if payload.get("thinking_used"):
+            parts.append("thinking used")
+        return " · ".join(parts)
+
+    if event_type == "result":
+        data = payload.get("data")
+        data = data if isinstance(data, dict) else {}
+        parts = [f"{bench}: completed"]
+        acc = data.get("accuracy")
+        cost = data.get("cost_usd")
+        if isinstance(acc, (int, float)):
+            parts.append(f"acc={acc:.4f}")
+        if isinstance(cost, (int, float)):
+            parts.append(f"cost=${cost:.4f}")
+        return " · ".join(parts)
+
+    if event_type == "done":
+        summary = payload.get("summary")
+        summary = summary if isinstance(summary, dict) else {}
+        completed = summary.get("benchmarks_completed", 0)
+        parts = [f"run completed · {completed} benchmark(s)"]
+        total_cost = summary.get("total_cost_usd")
+        if isinstance(total_cost, (int, float)):
+            parts.append(f"cost=${total_cost:.4f}")
+        return " · ".join(parts)
+
+    if event_type == "error":
+        return str(payload.get("message") or "run error")
+
+    return event_type
+
+
+def _event_role(payload: dict[str, Any]) -> str:
+    event_type = str(payload.get("type", "message"))
+    if event_type in {"result", "done"}:
+        return "assistant"
+    return "system"
+
+
+def _record_message(state: RunState, payload: dict[str, Any]) -> dict[str, Any]:
+    event = dict(payload)
+    created_at = event.get("created_at") or _utc_now_iso()
+    content = _event_content(event)
+    event["created_at"] = created_at
+    event["message"] = content
+    state.messages.append({
+        "role": _event_role(event),
+        "content": content,
+        "created_at": created_at,
+        "metadata": {
+            k: v
+            for k, v in event.items()
+            if k not in {"message", "created_at"}
+        },
+    })
+    return event
+
+
+async def _emit(state: RunState, payload: dict[str, Any], *, record: bool = True) -> None:
+    event = _record_message(state, payload) if record else payload
+    await state.queue.put(event)
 
 
 async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
     state.status = "running"
+    await _emit(state, {
+        "type": "status",
+        "phase": "started",
+        "message": (
+            f"run started · model={req.connection.model} · "
+            f"{len(req.benches)} benchmark(s)"
+        ),
+    })
     if req.accept_code_exec:
         accept_code_exec()
 
@@ -258,6 +357,15 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
             benchmarks=results,
             costs=costs,
         )
+        done_event = _record_message(state, {
+            "type": "done",
+            "summary": {
+                "run_id": state.run_id,
+                "total_cost_usd": cumulative_cost if cumulative_known else None,
+                "benchmarks_completed": len(results),
+            },
+        })
+        payload["messages"] = list(state.messages)
         state.final_payload = payload
         if state.status != "cancelled":
             state.status = "completed"
@@ -269,14 +377,7 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
         except Exception as e:  # pragma: no cover
             logger.warning("history upsert failed: %s", e)
 
-        await _emit(state, {
-            "type": "done",
-            "summary": {
-                "run_id": state.run_id,
-                "total_cost_usd": cumulative_cost if cumulative_known else None,
-                "benchmarks_completed": len(results),
-            },
-        })
+        await state.queue.put(done_event)
     except EvalBoxError as e:
         state.status = "failed"
         await _emit(state, {"type": "error", "message": str(e), "retryable": False})
@@ -285,8 +386,7 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
         state.status = "failed"
         await _emit(state, {"type": "error", "message": str(e), "retryable": False})
     finally:
-        from datetime import datetime, timezone
         state.finished_at = datetime.now(timezone.utc).isoformat(
             timespec="seconds"
         ).replace("+00:00", "Z")
-        await _emit(state, {"type": "_close"})
+        await _emit(state, {"type": "_close"}, record=False)

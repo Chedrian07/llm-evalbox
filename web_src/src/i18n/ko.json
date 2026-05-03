@@ -140,7 +140,9 @@
     "eta": "예상 남은 시간",
     "eta_unknown": "예상 시간 계산 중",
     "active_benches": "진행 벤치",
-    "events": "이벤트 로그"
+    "events": "이벤트 로그",
+    "messages": "Messages 로그",
+    "no_messages": "저장된 messages 로그가 없습니다."
   },
   "results": {
     "title": "결과",
@@ -148,6 +150,7 @@
     "radar": "Radar",
     "scatter": "Cost × Acc",
     "diff": "Diff",
+    "messages": "Messages",
     "raw": "원본 JSON",
     "new_run": "새 실행",
     "totals": "합계",

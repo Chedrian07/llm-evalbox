@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Lightweight EventSource wrapper. The SSE event names match the backend:
-// "progress" | "result" | "done" | "error" | "ping".
+// "status" | "progress" | "result" | "done" | "error" | "ping".
 
-export type SSEEventType = "progress" | "result" | "done" | "error" | "ping" | "message";
+export type SSEEventType = "status" | "progress" | "result" | "done" | "error" | "ping" | "message";
 
 export interface SSEHandlers {
   onProgress?: (data: any) => void;
@@ -34,7 +34,7 @@ export function subscribeRun(runId: string, handlers: SSEHandlers): () => void {
     }
   };
 
-  for (const t of ["progress", "result", "done", "error", "ping"] as const) {
+  for (const t of ["status", "progress", "result", "done", "error", "ping"] as const) {
     es.addEventListener(t, (ev) => dispatch(ev as MessageEvent, t));
   }
   es.onerror = () => {

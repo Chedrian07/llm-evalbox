@@ -140,7 +140,9 @@
     "eta": "ETA",
     "eta_unknown": "ETA pending",
     "active_benches": "Active benches",
-    "events": "Event log"
+    "events": "Event log",
+    "messages": "Messages log",
+    "no_messages": "No saved messages log yet."
   },
   "results": {
     "title": "Results",
@@ -148,6 +150,7 @@
     "radar": "Radar",
     "scatter": "Cost × Acc",
     "diff": "Diff",
+    "messages": "Messages",
     "raw": "Raw JSON",
     "new_run": "New run",
     "totals": "totals",

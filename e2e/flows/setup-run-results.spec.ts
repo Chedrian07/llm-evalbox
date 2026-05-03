@@ -37,6 +37,20 @@ test("setup → run → results renders the matrix", async ({ page }) => {
       tokens: { prompt: 20, completion: 2, reasoning: 0, cached_prompt: 0 },
       cost_usd_estimated: 0.001,
     },
+    messages: [
+      {
+        role: "system",
+        content: "run started · model=fake-model-alt · 1 benchmark(s)",
+        created_at: "2026-05-03T00:00:00Z",
+        metadata: { type: "status", phase: "started" },
+      },
+      {
+        role: "assistant",
+        content: "mmlu: completed · acc=0.5000 · cost=$0.0010",
+        created_at: "2026-05-03T00:00:01Z",
+        metadata: { type: "result", bench: "mmlu" },
+      },
+    ],
   };
 
   await page.route("**/api/defaults", (route) => {
@@ -140,13 +154,13 @@ test("setup → run → results renders the matrix", async ({ page }) => {
       contentType: "text/event-stream",
       body: [
         "event: progress",
-        "data: {\"type\":\"progress\",\"phase\":\"eval\",\"bench\":\"mmlu\",\"current\":2,\"total\":2,\"running_accuracy\":0.5,\"thinking_used\":false}",
+        "data: {\"type\":\"progress\",\"phase\":\"eval\",\"bench\":\"mmlu\",\"current\":2,\"total\":2,\"running_accuracy\":0.5,\"thinking_used\":false,\"message\":\"mmlu: 2/2 · acc=0.5000\",\"created_at\":\"2026-05-03T00:00:00Z\"}",
         "",
         "event: result",
-        "data: {\"type\":\"result\",\"bench\":\"mmlu\",\"data\":{\"name\":\"mmlu\",\"samples\":2,\"accuracy\":0.5,\"cost_usd\":0.001}}",
+        "data: {\"type\":\"result\",\"bench\":\"mmlu\",\"data\":{\"name\":\"mmlu\",\"samples\":2,\"accuracy\":0.5,\"cost_usd\":0.001},\"message\":\"mmlu: completed · acc=0.5000 · cost=$0.0010\",\"created_at\":\"2026-05-03T00:00:01Z\"}",
         "",
         "event: done",
-        "data: {\"type\":\"done\",\"summary\":{\"run_id\":\"evalbox-e2e\"}}",
+        "data: {\"type\":\"done\",\"summary\":{\"run_id\":\"evalbox-e2e\"},\"message\":\"run completed · 1 benchmark(s)\",\"created_at\":\"2026-05-03T00:00:01Z\"}",
         "",
         "",
       ].join("\n"),
@@ -161,6 +175,7 @@ test("setup → run → results renders the matrix", async ({ page }) => {
         status: "completed",
         started_at: result.started_at,
         finished_at: result.finished_at,
+        messages: result.messages,
         result,
       }),
     });
@@ -187,4 +202,6 @@ test("setup → run → results renders the matrix", async ({ page }) => {
 
   // Results matrix shows the benchmark we ran.
   await expect(page.getByText(/^mmlu$/)).toBeVisible();
+  await page.getByRole("button", { name: "Messages" }).click();
+  await expect(page.getByText(/mmlu: completed/)).toBeVisible();
 });
