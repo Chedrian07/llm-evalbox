@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, XCircle, Loader2, RefreshCw } from "lucide-react";
+import { Check, CheckCircle2, Loader2, RefreshCw, Search, XCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
+import type { ModelInfo } from "@/lib/api";
 import { useApp } from "@/lib/store";
+import { cn } from "@/lib/cn";
 
 const API_KEY_ENVS = [
   "OPENAI_API_KEY",
@@ -26,6 +28,7 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
   const s = useApp();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [modelFilter, setModelFilter] = useState("");
 
   // Auto-fetch the model list whenever connection inputs settle (debounced).
   // This gives users a native datalist autocomplete instead of having to type
@@ -118,6 +121,17 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
                 </option>
               ))}
             </datalist>
+            <ModelPicker
+              models={s.availableModels}
+              selectedModel={s.model}
+              filter={modelFilter}
+              onFilterChange={setModelFilter}
+              onSelect={(model) => {
+                s.setConnection({ model });
+                setModelFilter("");
+                setErr(null);
+              }}
+            />
           </div>
           <div className="space-y-1">
             <Label>{t("connection.adapter")}</Label>
@@ -213,6 +227,93 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function ModelPicker({
+  models,
+  selectedModel,
+  filter,
+  onFilterChange,
+  onSelect,
+}: {
+  models: ModelInfo[];
+  selectedModel: string;
+  filter: string;
+  onFilterChange: (value: string) => void;
+  onSelect: (model: string) => void;
+}) {
+  const { t } = useTranslation();
+  const visibleModels = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const filtered = q
+      ? models.filter((m) =>
+          `${m.id} ${m.owned_by ?? ""}`.toLowerCase().includes(q),
+        )
+      : models;
+    return filtered.slice(0, 12);
+  }, [models, filter]);
+
+  if (models.length === 0) return null;
+
+  return (
+    <div className="mt-2 rounded-md border border-input bg-muted/20 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[0.7rem] font-medium uppercase text-muted-foreground">
+          {t("connection.model_picker_title")}
+        </span>
+        <span className="text-[0.7rem] text-muted-foreground">
+          {t("connection.model_picker_showing", {
+            visible: visibleModels.length,
+            total: models.length,
+          })}
+        </span>
+      </div>
+      {models.length > 5 && (
+        <div className="relative mt-2">
+          <Search className="pointer-events-none absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            value={filter}
+            placeholder={t("connection.model_picker_search")!}
+            onChange={(e) => onFilterChange(e.target.value)}
+            className="h-8 pl-7 text-xs"
+          />
+        </div>
+      )}
+      <div className="mt-2 max-h-44 space-y-1 overflow-y-auto pr-1">
+        {visibleModels.length === 0 ? (
+          <div className="px-2 py-2 text-xs text-muted-foreground">
+            {t("connection.model_picker_empty")}
+          </div>
+        ) : (
+          visibleModels.map((model) => {
+            const selected = model.id === selectedModel;
+            return (
+              <button
+                key={model.id}
+                type="button"
+                onClick={() => onSelect(model.id)}
+                className={cn(
+                  "flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  selected && "bg-primary/10 text-primary",
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-mono">{model.id}</span>
+                  {model.owned_by && (
+                    <span className="block truncate text-[0.68rem] text-muted-foreground">
+                      {model.owned_by}
+                    </span>
+                  )}
+                </span>
+                {selected && <Check className="h-4 w-4 shrink-0" />}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }
 

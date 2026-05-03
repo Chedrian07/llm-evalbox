@@ -37,7 +37,11 @@
     "models_loading": "모델 목록 불러오는 중…",
     "models_count": "{{count}}개 모델",
     "models_refresh": "새로고침",
-    "models_error": "이 게이트웨이는 /v1/models 를 노출하지 않음 — 모델명 직접 입력"
+    "models_error": "이 게이트웨이는 /v1/models 를 노출하지 않음 — 모델명 직접 입력",
+    "model_picker_title": "조회된 모델",
+    "model_picker_showing": "{{visible}} / {{total}}",
+    "model_picker_search": "모델 필터",
+    "model_picker_empty": "일치하는 모델 없음"
   },
   "capability": {
     "title": "Capability",

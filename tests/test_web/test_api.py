@@ -84,6 +84,27 @@ def test_models_post_uses_inline_api_key(client):
 
 
 @respx.mock
+def test_models_post_dedupes_and_prioritizes_current_model(client):
+    respx.get("https://api.test/v1/models").mock(return_value=httpx.Response(200, json={
+        "data": [
+            {"id": "z-model", "owned_by": "test"},
+            {"id": "current-model", "owned_by": "test"},
+            {"id": "z-model", "owned_by": "duplicate"},
+            {"id": "a-model", "owned_by": "test"},
+        ]
+    }))
+
+    r = client.post("/api/models", json={
+        "base_url": "https://api.test/v1",
+        "model": "current-model",
+        "adapter": "chat_completions",
+        "api_key": "sk-inline",
+    })
+    assert r.status_code == 200
+    assert [m["id"] for m in r.json()] == ["current-model", "a-model", "z-model"]
+
+
+@respx.mock
 def test_connection_ok(client):
     respx.post("https://api.test/v1/chat/completions").mock(return_value=httpx.Response(200, json={
         "id": "x", "model": "gpt-4o-mini",

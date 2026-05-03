@@ -80,7 +80,10 @@ test("setup → run → results renders the matrix", async ({ page }) => {
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([{ id: "fake-model", owned_by: "test", created: 0 }]),
+      body: JSON.stringify([
+        { id: "fake-model", owned_by: "test", created: 0 },
+        { id: "fake-model-alt", owned_by: "test", created: 0 },
+      ]),
     });
   });
   await page.route("**/api/connection/test", (route) => {
@@ -165,6 +168,10 @@ test("setup → run → results renders the matrix", async ({ page }) => {
 
   await page.goto("/");
   await page.waitForTimeout(1000);
+
+  await expect(page.getByText(/Available models|조회된 모델/)).toBeVisible();
+  await page.getByRole("button", { name: /fake-model-alt/ }).click();
+  await expect(page.getByPlaceholder("gpt-4o-mini")).toHaveValue("fake-model-alt");
 
   // Test connection
   await page.getByRole("button", { name: /Test connection|연결 확인/ }).click();
