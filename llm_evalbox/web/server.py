@@ -21,9 +21,11 @@ from fastapi.staticfiles import StaticFiles
 from llm_evalbox._version import __version__
 from llm_evalbox.web.routes.benchmarks import router as benchmarks_router
 from llm_evalbox.web.routes.connection import router as connection_router
+from llm_evalbox.web.routes.history import router as history_router
 from llm_evalbox.web.routes.models import router as models_router
 from llm_evalbox.web.routes.pricing import router as pricing_router
 from llm_evalbox.web.routes.runs import router as runs_router
+from llm_evalbox.web.routes.shares import router as shares_router
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +98,8 @@ def build_app(*, bind_token: str | None = None) -> FastAPI:
     app.include_router(benchmarks_router)
     app.include_router(pricing_router)
     app.include_router(runs_router)
+    app.include_router(shares_router)
+    app.include_router(history_router)
 
     if FRONTEND_DIR.exists() and (FRONTEND_DIR / "index.html").exists():
         # Mount the SPA under "/". The catch-all path must come last so the

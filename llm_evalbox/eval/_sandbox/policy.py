@@ -23,6 +23,38 @@ class SandboxPolicy:
     workers: int = 4
 
 
+# Isolation matrix per tier (informational; tier1 also runs in this process's
+# user, tier2 in a fresh container, tier3 in an external service).
+ISOLATION = {
+    "subprocess": {
+        "network": "host (parent's connectivity)",
+        "filesystem": "host (env whitelist; tempfile cleaned up)",
+        "memory": "RLIMIT_AS / RLIMIT_DATA (partial on macOS)",
+        "cpu": "RLIMIT_CPU + parent timeout",
+    },
+    "docker": {
+        "network": "none (--network=none)",
+        "filesystem": "read-only mount + 64M tmpfs at /tmp",
+        "memory": "--memory + memory-swap == limit",
+        "cpu": "--cpus=1 + parent timeout (timeout_s + 5)",
+    },
+    "e2b": {
+        "network": "vendor-provided sandbox",
+        "filesystem": "ephemeral",
+        "memory": "vendor",
+        "cpu": "vendor",
+    },
+}
+
+
+def resolve_tier(explicit: str | None = None) -> str:
+    """Pick a sandbox tier based on the explicit flag or `$EVALBOX_SANDBOX`."""
+    val = (explicit or os.environ.get("EVALBOX_SANDBOX") or "subprocess").lower()
+    if val not in ("subprocess", "docker", "e2b"):
+        raise SandboxError(f"unknown sandbox tier {val!r}; expected subprocess|docker|e2b")
+    return val
+
+
 _PROCESS_ACCEPT = False
 
 

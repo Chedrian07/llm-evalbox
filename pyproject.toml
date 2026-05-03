@@ -64,11 +64,16 @@ path = "llm_evalbox/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["llm_evalbox"]
 
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "scripts/_hatch_build_frontend.py"
+
 [tool.hatch.build.targets.wheel.force-include]
 "llm_evalbox/data/manifest.yaml" = "llm_evalbox/data/manifest.yaml"
 "llm_evalbox/data/datasets" = "llm_evalbox/data/datasets"
 "llm_evalbox/pricing/catalog.yaml" = "llm_evalbox/pricing/catalog.yaml"
-# Frontend bundle (built by scripts/build_frontend.py). Not version-controlled.
+# Frontend bundle (built by scripts/build_frontend.py and the hatch hook).
+# Not version-controlled; the hook + force-include conspire so the wheel
+# always carries the SPA when a node package manager is available.
 "llm_evalbox/web/frontend" = "llm_evalbox/web/frontend"
 
 [tool.hatch.build.targets.sdist]

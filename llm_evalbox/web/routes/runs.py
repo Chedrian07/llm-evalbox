@@ -242,6 +242,13 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
         if state.status != "cancelled":
             state.status = "completed"
 
+        # Persist into the cross-process SQLite history (best effort).
+        try:
+            from llm_evalbox.cache import upsert_run
+            upsert_run(payload)
+        except Exception as e:  # pragma: no cover
+            logger.warning("history upsert failed: %s", e)
+
         await _emit(state, {
             "type": "done",
             "summary": {

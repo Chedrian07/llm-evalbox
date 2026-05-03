@@ -22,7 +22,9 @@ from llm_evalbox.core.messages import Message
 from llm_evalbox.eval._sandbox import (
     SandboxPolicy,
     require_accepted,
-    run_python_with_stdin,
+)
+from llm_evalbox.eval._sandbox import (
+    run_python_with_stdin_tiered as run_python_with_stdin,
 )
 from llm_evalbox.eval.base import BaseBenchmark
 from llm_evalbox.eval.datasets import deterministic_sample, ensure_dataset, load_jsonl

@@ -431,6 +431,13 @@ async def _run_async(
     if save_questions:
         write_result_questions_jsonl(run_dir / questions_filename, results)
 
+    # Persist into the cross-process SQLite history (best effort — never fails the run).
+    try:
+        from llm_evalbox.cache import upsert_run
+        upsert_run(payload)
+    except Exception as e:  # pragma: no cover
+        logger.warning("history upsert failed: %s", e)
+
     if print_table:
         console.print()
         render_run_table(results, costs=costs, console=console)
@@ -721,6 +728,27 @@ def cmd_cache_info() -> None:
     console.print(f"  files total: {total/1e6:.1f} MB")
 
 
+@cache_app.command("history", help="List runs in the persistent SQLite history.")
+def cmd_cache_history(
+    limit: int = typer.Option(20, "--limit"),
+    model: str | None = typer.Option(None, "--model", help="Filter by model name."),
+) -> None:
+    from llm_evalbox.cache import list_runs
+    rows = list_runs(limit=limit, model=model)
+    if not rows:
+        console.print("(empty)")
+        return
+    for r in rows:
+        acc = r.get("accuracy_macro")
+        cost = r.get("cost_usd")
+        console.print(
+            f"  {r['run_id']:50s} {r.get('model','?'):20s} "
+            f"acc={(acc if acc is not None else 0):.3f}  "
+            f"cost={(f'${cost:.4f}') if cost is not None else '-':>9}  "
+            f"benches={r.get('bench_count',0)}"
+        )
+
+
 @cache_app.command("clear", help="Delete cached datasets and runs (interactive confirm).")
 def cmd_cache_clear(yes: bool = typer.Option(False, "--yes", "-y")) -> None:
     root = cache_root()
@@ -734,6 +762,69 @@ def cmd_cache_clear(yes: bool = typer.Option(False, "--yes", "-y")) -> None:
     import shutil
     shutil.rmtree(root)
     console.print(f"removed {root}")
+
+
+# ============================================================ compare
+@app.command("compare", help="Print a side-by-side comparison of multiple run-dirs.")
+def cmd_compare(
+    run_dirs: list[Path] = typer.Argument(..., exists=True, file_okay=False),
+    output_md: Path | None = typer.Option(None, "--md", help="Write Markdown to this path."),
+) -> None:
+    import json as _json
+
+    from llm_evalbox.reports import render_compare_md
+    payloads = []
+    for rd in run_dirs:
+        rj = rd / "result.json"
+        if not rj.exists():
+            console.print(f"[yellow]skip {rd}[/yellow] (no result.json)")
+            continue
+        with open(rj, encoding="utf-8") as f:
+            payloads.append(_json.load(f))
+    if not payloads:
+        console.print("[red]error:[/red] no result.json found in any run-dir")
+        raise typer.Exit(2)
+    md = render_compare_md(payloads)
+    if output_md:
+        output_md.write_text(md, encoding="utf-8")
+        console.print(f"compare written to: [bold]{output_md}[/bold]")
+    else:
+        console.print(md)
+
+
+# ============================================================ export
+@app.command("export", help="Export a run-dir to markdown / html / json.")
+def cmd_export(
+    run_dir: Path = typer.Argument(..., exists=True, file_okay=False),
+    to: str = typer.Option("md", "--to", help="md | html | json"),
+    output: Path | None = typer.Option(None, "--output", help="Output path (default stdout)."),
+) -> None:
+    import json as _json
+    rj = run_dir / "result.json"
+    if not rj.exists():
+        console.print(f"[red]error:[/red] {rj} missing")
+        raise typer.Exit(2)
+    with open(rj, encoding="utf-8") as f:
+        payload = _json.load(f)
+
+    fmt = to.lower()
+    if fmt == "md":
+        from llm_evalbox.reports import render_run_md
+        text = render_run_md(payload)
+    elif fmt == "html":
+        from llm_evalbox.reports import render_run_html
+        text = render_run_html(payload)
+    elif fmt == "json":
+        text = _json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    else:
+        console.print(f"[red]error:[/red] --to must be md|html|json (got {to!r})")
+        raise typer.Exit(2)
+
+    if output:
+        output.write_text(text, encoding="utf-8")
+        console.print(f"exported to: [bold]{output}[/bold]")
+    else:
+        console.print(text)
 
 
 if __name__ == "__main__":

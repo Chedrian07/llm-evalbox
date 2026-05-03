@@ -1,69 +1,168 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Download, Share2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionCard } from "@/components/connection-card";
+import { AnswerDiff } from "@/components/charts/answer-diff";
+import { CostVsAccuracyChart } from "@/components/charts/cost-vs-accuracy";
+import { RadarChartComparison } from "@/components/charts/radar-chart";
+import { RunHistorySidebar } from "@/components/run-history-sidebar";
 import { useApp } from "@/lib/store";
+import { listHistory, saveHistory, type HistoryEntry } from "@/lib/history";
 import { fmtAcc, fmtCost, fmtMs, fmtNum } from "@/lib/format";
+
+type Tab = "matrix" | "radar" | "scatter" | "diff" | "raw";
 
 export function ResultsPage() {
   const { t } = useTranslation();
   const s = useApp();
-  const [tab, setTab] = useState<"matrix" | "raw">("matrix");
+  const [tab, setTab] = useState<Tab>("matrix");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  // Persist this run into IndexedDB once the result is available.
+  useEffect(() => {
+    if (s.finalResult && s.runId) {
+      const entry: HistoryEntry = {
+        run_id: s.runId,
+        saved_at: Date.now(),
+        model: s.finalResult.provider?.model ?? s.model,
+        base_url: s.finalResult.provider?.base_url ?? s.baseUrl,
+        result: s.finalResult,
+      };
+      saveHistory(entry)
+        .then(() => setRefreshKey((k) => k + 1))
+        .catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.finalResult, s.runId]);
+
+  // Initial history load (used by Radar / Scatter / Diff even before a save).
+  useEffect(() => {
+    listHistory()
+      .then(setHistory)
+      .catch(() => {});
+  }, [refreshKey]);
 
   const r = s.finalResult;
 
+  function exportFile(kind: "json" | "md" | "html") {
+    if (!r) return;
+    let body = "";
+    let mime = "application/octet-stream";
+    let filename = `${r.run_id}`;
+    if (kind === "json") {
+      body = JSON.stringify(r, null, 2);
+      mime = "application/json";
+      filename += ".json";
+    } else if (kind === "md") {
+      body = renderRunMd(r);
+      mime = "text/markdown";
+      filename += ".md";
+    } else {
+      body = renderRunHtml(r);
+      mime = "text/html";
+      filename += ".html";
+    }
+    const blob = new Blob([body], { type: mime });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function share() {
+    if (!s.runId) return;
+    const resp = await fetch("/api/shares", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ run_id: s.runId }),
+    });
+    if (!resp.ok) return;
+    const j = await resp.json();
+    setShareUrl(j.url);
+  }
+
   return (
-    <div className="space-y-4">
-      <ConnectionCard compact />
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>{t("results.title")}</span>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant={tab === "matrix" ? "default" : "ghost"}
-                onClick={() => setTab("matrix")}
-              >
-                {t("results.matrix")}
-              </Button>
-              <Button
-                size="sm"
-                variant={tab === "raw" ? "default" : "ghost"}
-                onClick={() => setTab("raw")}
-              >
-                {t("results.raw")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  s.setStage("setup");
-                  s.setRunId(null);
-                  s.setFinalResult(null);
-                }}
-              >
-                {t("results.new_run")}
-              </Button>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!r ? (
-            <p className="text-sm text-muted-foreground">…</p>
-          ) : tab === "matrix" ? (
-            <Matrix r={r} />
-          ) : (
-            <pre className="overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed">
-              {JSON.stringify(r, null, 2)}
-            </pre>
-          )}
-        </CardContent>
-      </Card>
+    <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+      <div className="space-y-4">
+        <ConnectionCard compact />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>{t("results.title")}</span>
+              <div className="flex flex-wrap items-center gap-1">
+                <TabBtn label={t("results.matrix")} on={tab === "matrix"} onClick={() => setTab("matrix")} />
+                <TabBtn label="Radar" on={tab === "radar"} onClick={() => setTab("radar")} />
+                <TabBtn label="Cost × Acc" on={tab === "scatter"} onClick={() => setTab("scatter")} />
+                <TabBtn label="Diff" on={tab === "diff"} onClick={() => setTab("diff")} />
+                <TabBtn label={t("results.raw")} on={tab === "raw"} onClick={() => setTab("raw")} />
+                <Button size="sm" variant="outline" onClick={() => exportFile("md")}>
+                  <Download className="h-3 w-3" /> .md
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => exportFile("html")}>
+                  <Download className="h-3 w-3" /> .html
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => exportFile("json")}>
+                  <Download className="h-3 w-3" /> .json
+                </Button>
+                <Button size="sm" variant="outline" onClick={share}>
+                  <Share2 className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    s.setStage("setup");
+                    s.setRunId(null);
+                    s.setFinalResult(null);
+                  }}
+                >
+                  {t("results.new_run")}
+                </Button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {shareUrl && (
+              <p className="mb-3 text-xs text-muted-foreground">
+                share: <code className="font-mono">{shareUrl}</code>
+              </p>
+            )}
+            {!r ? (
+              <p className="text-sm text-muted-foreground">…</p>
+            ) : tab === "matrix" ? (
+              <Matrix r={r} />
+            ) : tab === "radar" ? (
+              <RadarChartComparison runs={history} />
+            ) : tab === "scatter" ? (
+              <CostVsAccuracyChart runs={history} />
+            ) : tab === "diff" ? (
+              <AnswerDiff runs={history} />
+            ) : (
+              <pre className="overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed">
+                {JSON.stringify(r, null, 2)}
+              </pre>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <RunHistorySidebar refreshKey={refreshKey} onChange={setHistory} />
     </div>
+  );
+}
+
+function TabBtn({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
+  return (
+    <Button size="sm" variant={on ? "default" : "ghost"} onClick={onClick}>
+      {label}
+    </Button>
   );
 }
 
@@ -71,9 +170,8 @@ function Matrix({ r }: { r: any }) {
   const { t } = useTranslation();
   const benches = (r.benchmarks ?? []) as any[];
   const totals = r.totals ?? {};
-
   return (
-    <div className="space-y-4 overflow-x-auto">
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="border-b text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
@@ -129,4 +227,35 @@ function Matrix({ r }: { r: any }) {
       </table>
     </div>
   );
+}
+
+// Lightweight client-side renderers so the SPA can export without the
+// backend. Loose mirrors of `reports/markdown.py` / `reports/html.py`.
+function renderRunMd(r: any): string {
+  const p = r.provider ?? {};
+  const t = r.totals ?? {};
+  const lines: string[] = [];
+  lines.push(`# evalbox run — ${r.run_id ?? "?"}`);
+  lines.push("");
+  lines.push(`- **model** \`${p.model ?? "?"}\``);
+  lines.push(`- **base_url** \`${p.base_url ?? "?"}\` (adapter \`${p.adapter ?? "?"}\`)`);
+  lines.push(`- **macro accuracy** ${(t.accuracy_macro ?? 0).toFixed(4)}`);
+  lines.push(`- **total cost** ${t.cost_usd_estimated == null ? "—" : `$${t.cost_usd_estimated.toFixed(4)}`}`);
+  lines.push("");
+  lines.push("| benchmark | samples | accuracy | cost |");
+  lines.push("|---|---:|---:|---:|");
+  for (const b of r.benchmarks ?? []) {
+    const cost = b.cost_usd_estimated == null ? "—" : `$${b.cost_usd_estimated.toFixed(4)}`;
+    lines.push(`| ${b.name} | ${b.samples} | ${(b.accuracy ?? 0).toFixed(4)} | ${cost} |`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+function renderRunHtml(r: any): string {
+  const md = renderRunMd(r).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  return `<!doctype html><html><head><meta charset="utf-8">
+<title>evalbox · ${r.provider?.model ?? "run"}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:48em;margin:2em auto;padding:0 1em}
+pre{background:#f6f6f6;padding:1em;border-radius:6px;white-space:pre-wrap}</style></head>
+<body><pre>${md}</pre></body></html>`;
 }
