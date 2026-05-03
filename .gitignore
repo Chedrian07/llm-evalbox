@@ -34,6 +34,9 @@ env/
 ENV/
 .python-version  # 단, 프로젝트 표준 버전을 커밋하려면 이 줄 제거
 
+# uv lock (per-developer; pyproject is the source of truth)
+uv.lock
+
 # Tooling caches
 .pytest_cache/
 .mypy_cache/

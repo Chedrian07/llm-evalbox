@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -635,7 +637,22 @@ def cmd_web(
     no_open: bool = typer.Option(False, "--no-open", help="Don't auto-open the browser."),
     bind_token: str | None = typer.Option(None, "--bind-token", envvar="EVALBOX_WEB_BIND_TOKEN"),
     reload: bool = typer.Option(False, "--reload", help="Auto-reload on code changes (dev)."),
+    env_file: str | None = typer.Option(None, "--env-file", help="Path to a .env file to load before starting."),
 ) -> None:
+    # Load .env so the SPA's GET /api/defaults can surface the same values
+    # the CLI commands honor (BASE_URL, MODEL, ADAPTER, THINKING, MAX_COST_USD,
+    # …). API keys stay in process memory; the SPA only sees `has_api_key`.
+    loaded = load_env_files(env_file)
+    if loaded:
+        console.print(f"[dim]loaded env: {', '.join(str(p) for p in loaded)}[/dim]")
+
+    # Re-read host/port from env *after* loading the .env, so settings inside
+    # .env actually take effect on the same invocation. CLI flags still win.
+    host = os.environ.get("EVALBOX_WEB_HOST", host)
+    if "--port" not in sys.argv:
+        port = int(os.environ.get("EVALBOX_WEB_PORT", port))
+    bind_token = bind_token or os.environ.get("EVALBOX_WEB_BIND_TOKEN")
+
     # Bind safety: when listening on a non-loopback interface we require a
     # token so the server isn't immediately exposed to other hosts.
     if host not in ("127.0.0.1", "::1", "localhost") and not bind_token:

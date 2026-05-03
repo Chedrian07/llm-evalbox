@@ -85,11 +85,22 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
             </select>
           </div>
           <div className="space-y-1">
-            <Label>{t("connection.api_key")}</Label>
+            <Label className="flex items-center justify-between">
+              <span>{t("connection.api_key")}</span>
+              {s.hasServerApiKey && (
+                <span className="text-[0.7rem] font-normal text-emerald-500">
+                  ✓ ${s.apiKeyEnv}
+                </span>
+              )}
+            </Label>
             <Input
               type="password"
               value={s.apiKey}
-              placeholder={t("connection.api_key_placeholder")!}
+              placeholder={
+                s.hasServerApiKey
+                  ? `(picked up from ${s.apiKeyEnv} on the server — leave blank to use it)`
+                  : t("connection.api_key_placeholder")!
+              }
               onChange={(e) => s.setConnection({ apiKey: e.target.value })}
             />
           </div>

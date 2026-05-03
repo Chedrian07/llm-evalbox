@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from llm_evalbox._version import __version__
 from llm_evalbox.web.routes.benchmarks import router as benchmarks_router
 from llm_evalbox.web.routes.connection import router as connection_router
+from llm_evalbox.web.routes.defaults import router as defaults_router
 from llm_evalbox.web.routes.history import router as history_router
 from llm_evalbox.web.routes.models import router as models_router
 from llm_evalbox.web.routes.pricing import router as pricing_router
@@ -93,6 +94,7 @@ def build_app(*, bind_token: str | None = None) -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
 
+    app.include_router(defaults_router)
     app.include_router(connection_router)
     app.include_router(models_router)
     app.include_router(benchmarks_router)

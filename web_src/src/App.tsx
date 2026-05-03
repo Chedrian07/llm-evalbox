@@ -1,14 +1,27 @@
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { LocaleToggle } from "@/components/locale-toggle";
 import { ResultsPage } from "@/pages/Results";
 import { RunningPage } from "@/pages/Running";
 import { SetupPage } from "@/pages/Setup";
+import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
 
 export function App() {
   const { t } = useTranslation();
   const stage = useApp((s) => s.stage);
+  const hydrateFromServer = useApp((s) => s.hydrateFromServer);
+
+  // Pull defaults from /api/defaults once at mount so values surfaced by
+  // `evalbox web` (with .env loaded) populate the connection / options
+  // inputs instead of the OpenAI public defaults baked into the store.
+  useEffect(() => {
+    api.defaults().then(hydrateFromServer).catch(() => {
+      // Backend down or older build — keep the static defaults.
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-screen">

@@ -76,8 +76,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+export interface ServerDefaults {
+  base_url: string | null;
+  model: string | null;
+  adapter: string | null;
+  thinking: string | null;
+  concurrency: number | null;
+  rpm: number | null;
+  tpm: number | null;
+  max_cost_usd: number | null;
+  accept_code_exec: boolean;
+  no_cache: boolean;
+  drop_params: string | null;
+  api_key_env: string;
+  has_api_key: boolean;
+  detected_api_key_envs: string[];
+}
+
 export const api = {
   health: () => request<{ status: string; version: string }>("/api/health"),
+  defaults: () => request<ServerDefaults>("/api/defaults"),
   benchmarks: () => request<BenchmarkInfo[]>("/api/benchmarks"),
   testConnection: (req: ConnectionRequest) =>
     request<ConnectionResponse>("/api/connection/test", {

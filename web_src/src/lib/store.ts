@@ -2,7 +2,7 @@
 // Global app state: connection config, selected benches, run lifecycle.
 
 import { create } from "zustand";
-import type { CapabilityInfo, ConnectionResponse } from "./api";
+import type { CapabilityInfo, ConnectionResponse, ServerDefaults } from "./api";
 
 export type Stage = "setup" | "running" | "results";
 
@@ -25,8 +25,15 @@ interface AppState {
   apiKeyEnv: string;
   conn: ConnectionResponse | null;
   capability: CapabilityInfo | null;
+  /** True when the server says an API key is available in env — the SPA can
+      hide the key input and the backend resolves it server-side per request. */
+  hasServerApiKey: boolean;
+  /** True once we have either tried hydrating from /api/defaults or accepted
+      the fallback defaults — used to delay first paint of the connection card. */
+  hydrated: boolean;
   setConnection: (patch: Partial<Pick<AppState, "baseUrl" | "model" | "adapter" | "apiKey" | "apiKeyEnv">>) => void;
   setConnResponse: (resp: ConnectionResponse) => void;
+  hydrateFromServer: (d: ServerDefaults) => void;
 
   // Setup
   selectedBenches: Set<string>;
@@ -73,9 +80,27 @@ export const useApp = create<AppState>((set) => ({
   apiKeyEnv: "OPENAI_API_KEY",
   conn: null,
   capability: null,
+  hasServerApiKey: false,
+  hydrated: false,
   setConnection: (patch) => set(patch),
   setConnResponse: (resp) =>
     set({ conn: resp, capability: resp.capability }),
+  hydrateFromServer: (d) =>
+    set((prev) => ({
+      // Each field: prefer the server-supplied value, fall back to the
+      // existing default. We don't override values the user has already
+      // typed (initial mount only).
+      baseUrl: d.base_url ?? prev.baseUrl,
+      model: d.model ?? prev.model,
+      adapter: (d.adapter as AppState["adapter"]) ?? prev.adapter,
+      apiKeyEnv: d.api_key_env ?? prev.apiKeyEnv,
+      thinking: ((d.thinking as AppState["thinking"]) ?? prev.thinking),
+      concurrency: d.concurrency ?? prev.concurrency,
+      maxCostUsd: d.max_cost_usd ?? prev.maxCostUsd,
+      acceptCodeExec: d.accept_code_exec || prev.acceptCodeExec,
+      hasServerApiKey: d.has_api_key,
+      hydrated: true,
+    })),
 
   selectedBenches: new Set(["mmlu"]),
   toggleBench: (name) =>
