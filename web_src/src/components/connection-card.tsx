@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
-import { fmtMs } from "@/lib/format";
 
 export function ConnectionCard({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();

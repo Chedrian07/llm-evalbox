@@ -108,7 +108,11 @@ export const useApp = create<AppState>((set) => ({
     set((s) => ({
       benchProgress: {
         ...s.benchProgress,
-        [b]: { bench: b, current: 0, total: 0, running_accuracy: 0, thinking_used: false, done: false, ...s.benchProgress[b], ...patch },
+        [b]: {
+          ...{ bench: b, current: 0, total: 0, running_accuracy: 0, thinking_used: false, done: false },
+          ...s.benchProgress[b],
+          ...patch,
+        },
       },
     })),
   finalResult: null,

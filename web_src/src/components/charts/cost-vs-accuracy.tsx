@@ -81,7 +81,7 @@ export function CostVsAccuracyChart({ runs }: Props) {
             background: "hsl(var(--card))",
             border: "1px solid hsl(var(--border))",
           }}
-          formatter={(v: any, n: string, p: any) => {
+          formatter={(v: any, n: string) => {
             if (n === "x") return [`$${v.toFixed(4)}`, "cost"];
             if (n === "y") return [v.toFixed(3), "accuracy"];
             return [v, n];
