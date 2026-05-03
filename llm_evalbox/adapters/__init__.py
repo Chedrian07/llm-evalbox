@@ -10,6 +10,7 @@ from llm_evalbox.adapters.capabilities import (
 )
 from llm_evalbox.adapters.chat_completions import ChatCompletionsAdapter
 from llm_evalbox.adapters.ratelimit import RateLimiter
+from llm_evalbox.adapters.responses import ResponsesAdapter
 from llm_evalbox.adapters.retry import retry_policy
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "ChatAdapter",
     "ChatCompletionsAdapter",
     "RateLimiter",
+    "ResponsesAdapter",
     "capability_for",
     "resolve_adapter",
     "retry_policy",

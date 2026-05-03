@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
+
 from llm_evalbox.adapters.capabilities import (
     capability_for,
     strip_unsupported_keys,
@@ -38,6 +40,28 @@ def test_user_drop_params_force_strip():
     out = strip_unsupported_keys(body, cap, user_drop=["top_k"])
     assert "top_k" not in out
     assert "stop" in out
+
+
+@pytest.mark.parametrize("message,expected", [
+    # Variations we've seen in the wild
+    ("HTTP 400: unrecognized parameter: top_k", {"top_k"}),
+    ("Error: 'reasoning_effort' is not supported by this model", {"reasoning_effort"}),
+    ("unknown argument: presence_penalty", {"presence_penalty"}),
+    ("invalid value for 'temperature' must be between 0 and 1", {"temperature"}),
+    ('parameter "frequency_penalty" is not supported', {"frequency_penalty"}),
+    # gpt-5.4-mini specific: maps the value back to reasoning_effort
+    ("level \"minimal\" not supported, valid levels: low, medium, high, xhigh",
+     {"reasoning_effort"}),
+    # multiple in one message
+    ("unrecognized parameter: top_k. unknown key: stop", {"top_k", "stop"}),
+    # nothing to extract
+    ("server overloaded, please retry", set()),
+    # extracted but not a known sampling key → filtered out
+    ("unknown argument: frobnicate", set()),
+])
+def test_parse_unsupported_param_error(message, expected):
+    from llm_evalbox.adapters.capabilities import parse_unsupported_param_error
+    assert parse_unsupported_param_error(message) == expected
 
 
 def test_temperature_floor_clamped():

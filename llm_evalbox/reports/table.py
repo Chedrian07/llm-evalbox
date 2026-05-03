@@ -93,3 +93,59 @@ def render_run_table(
     )
 
     console.print(table)
+
+
+def render_thinking_compare_table(
+    off_results: list[BenchmarkResult],
+    on_results: list[BenchmarkResult],
+    *,
+    off_costs: dict[str, float | None] | None = None,
+    on_costs: dict[str, float | None] | None = None,
+    console: Console | None = None,
+) -> None:
+    """Print a side-by-side off vs on table plus a delta row per benchmark."""
+    console = console or Console()
+    off_costs = off_costs or {}
+    on_costs = on_costs or {}
+
+    by_name = {r.benchmark_name: r for r in off_results}
+    on_by_name = {r.benchmark_name: r for r in on_results}
+
+    table = Table(title="thinking on/off comparison", show_lines=False)
+    table.add_column("benchmark", style="bold")
+    table.add_column("acc(off)", justify="right")
+    table.add_column("acc(on)", justify="right")
+    table.add_column("Δacc", justify="right")
+    table.add_column("p95(off)", justify="right")
+    table.add_column("p95(on)", justify="right")
+    table.add_column("reason(off)", justify="right")
+    table.add_column("reason(on)", justify="right")
+    table.add_column("cost(off)", justify="right")
+    table.add_column("cost(on)", justify="right")
+    table.add_column("Δcost", justify="right")
+
+    names = sorted(set(by_name) | set(on_by_name))
+    for name in names:
+        off = by_name.get(name)
+        on = on_by_name.get(name)
+        if off is None or on is None:
+            continue
+        d_acc = on.accuracy - off.accuracy
+        c_off = off_costs.get(name)
+        c_on = on_costs.get(name)
+        d_cost = (c_on - c_off) if (c_off is not None and c_on is not None) else None
+        table.add_row(
+            name,
+            f"{off.accuracy:.4f}",
+            f"{on.accuracy:.4f}",
+            (f"{d_acc:+.4f}"),
+            _fmt_lat(off.p95_latency_ms),
+            _fmt_lat(on.p95_latency_ms),
+            f"{off.usage_total.reasoning_tokens:,}",
+            f"{on.usage_total.reasoning_tokens:,}",
+            (f"{c_off:.4f}" if c_off is not None else "—"),
+            (f"{c_on:.4f}" if c_on is not None else "—"),
+            (f"{d_cost:+.4f}" if d_cost is not None else "—"),
+        )
+
+    console.print(table)

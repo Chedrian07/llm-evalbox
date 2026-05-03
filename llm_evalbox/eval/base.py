@@ -59,6 +59,7 @@ class BenchmarkResult:
     error_breakdown: dict[str, int]
     category_scores: dict[str, float] | None
     thinking_used: bool
+    denominator_policy: str = "lenient"  # "lenient" (ok|wrong_answer) | "strict" (all)
     cost_usd_estimated: float | None = None
     questions: list[QuestionResult] = field(default_factory=list)
 
@@ -187,6 +188,8 @@ class BaseBenchmark(ABC):
         thinking_mode: str,
         strict: bool,
         sem: asyncio.Semaphore,
+        cache: Any | None = None,
+        base_url: str = "",
     ) -> tuple[int, dict, ChatResponse | None, str, str]:
         """Run one item.
 
@@ -204,9 +207,36 @@ class BaseBenchmark(ABC):
         )
         prompt_text = "\n".join(m.content for m in req.messages)
 
+        # Cache lookup (response cache, PLAN §13.3) — gated on caller passing
+        # a cache instance + a base_url (so the key reflects the gateway).
+        cache_k: str | None = None
+        if cache is not None and getattr(cache, "enabled", False):
+            from llm_evalbox.cache.responses import cache_key as _build_cache_key
+            sampling_dict = req.model_dump(
+                include={
+                    "temperature", "top_p", "top_k", "max_tokens",
+                    "presence_penalty", "frequency_penalty", "repetition_penalty",
+                    "reasoning_effort", "seed", "stop",
+                }
+            )
+            cache_k = _build_cache_key(
+                adapter_name=adapter.name,
+                base_url=base_url,
+                model=model,
+                messages=req.messages,
+                sampling=sampling_dict,
+                thinking_mode=thinking_mode,
+                benchmark_name=self.name,
+            )
+            hit = cache.get(cache_k)
+            if hit is not None:
+                return index, item, hit, "ok", prompt_text
+
         async with sem:
             try:
                 resp = await adapter.chat(req)
+                if cache is not None and cache_k is not None:
+                    cache.put(cache_k, resp)
                 return index, item, resp, "ok", prompt_text
             except AdapterError as e:
                 logger.warning("adapter error on item %d: %s", index, e)
@@ -247,7 +277,10 @@ class BaseBenchmark(ABC):
         sampling: SamplingOverrides | None = None,
         thinking: str = "auto",
         strict_deterministic: bool = False,
+        strict_failures: bool = False,
         no_thinking_rerun: bool = False,
+        cache: Any | None = None,
+        base_url: str = "",
     ) -> BenchmarkResult:
         """Run the benchmark. Returns aggregated `BenchmarkResult`.
 
@@ -256,6 +289,15 @@ class BaseBenchmark(ABC):
           - If any response carries observed thinking, mode flips to "on" for
             subsequent items and (unless `no_thinking_rerun=True`) the first
             batch is re-run so its truncated answers don't pollute accuracy.
+
+        Denominator policy:
+          - `strict_failures=False` (lenient, default): only `ok`+`wrong_answer`
+            count toward the denominator. Sandbox/network errors are excluded.
+            Use this for quick comparisons where infra noise shouldn't hurt scores.
+          - `strict_failures=True` (strict): all questions count, including
+            sandbox failures (`compile_error`, `runtime_error`, `timeout`,
+            `memory`), `generation_failed`, and `network`. Use this for
+            academic comparison against published numbers.
         """
         if sampling is not None and sampling.has_any() and strict_deterministic:
             logger.warning("strict_deterministic=True overrides sampling overrides")
@@ -289,6 +331,8 @@ class BaseBenchmark(ABC):
                     thinking_mode=thinking_mode,
                     strict=strict_deterministic,
                     sem=sem,
+                    cache=cache,
+                    base_url=base_url,
                 )
                 for i in batch_indices
             ]
@@ -317,6 +361,8 @@ class BaseBenchmark(ABC):
                                 thinking_mode=thinking_mode,
                                 strict=strict_deterministic,
                                 sem=sem,
+                                cache=cache,
+                                base_url=base_url,
                             )
                             for i in batch_indices
                         ]
@@ -373,8 +419,13 @@ class BaseBenchmark(ABC):
         # Aggregate
         ordered = [results_by_idx[i] for i in range(total)]
 
-        # accuracy denominator: only ok | wrong_answer (i.e. no network/generation failures)
-        scored = [r for r in ordered if r.error_kind in ("ok", "wrong_answer")]
+        # accuracy denominator policy:
+        #   - lenient (default): only ok | wrong_answer (sandbox/network excluded)
+        #   - strict (--strict-failures): all rows count
+        if strict_failures:
+            scored = ordered
+        else:
+            scored = [r for r in ordered if r.error_kind in ("ok", "wrong_answer")]
         correct_count = sum(1 for r in scored if r.correct)
         denom = len(scored)
         accuracy = (correct_count / denom) if denom else 0.0
@@ -416,5 +467,6 @@ class BaseBenchmark(ABC):
             error_breakdown=error_breakdown,
             category_scores=category_scores,
             thinking_used=thinking_used,
+            denominator_policy="strict" if strict_failures else "lenient",
             questions=ordered,
         )

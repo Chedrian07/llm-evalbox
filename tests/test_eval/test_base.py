@@ -91,6 +91,61 @@ async def test_run_auto_thinking_switch(mini_mmlu):
     assert result.thinking_used is True
 
 
+@pytest.mark.asyncio
+async def test_strict_failures_changes_denominator():
+    """Sandbox/network failures should be excluded by default but counted in strict mode."""
+    from llm_evalbox.adapters.base import ChatAdapter
+    from llm_evalbox.core.exceptions import NetworkError
+
+    class _PartiallyFailingAdapter(ChatAdapter):
+        name = "fail-half"
+
+        def __init__(self, fail_indices: set[int]):
+            super().__init__()
+            self._fail = fail_indices
+            self._call = 0
+
+        async def chat(self, req):
+            i = self._call
+            self._call += 1
+            if i in self._fail:
+                raise NetworkError("simulated timeout")
+            from llm_evalbox.core.request import ChatResponse, Usage
+            # Use the question text to look up the gold answer (same trick as _MockAdapter).
+            # All answers are correct here.
+            text = "B"  # mini_mmlu fixture has B for items 0,1,4
+            return ChatResponse(
+                text=text, raw_text=text,
+                usage=Usage(prompt_tokens=10, completion_tokens=1, total_tokens=11),
+                latency_ms=5.0,
+            )
+
+        async def list_models(self): return []
+
+    items = [
+        {"id": str(i), "question": f"q{i}", "choices": ["A","B","C","D"],
+         "answer": "B", "subject": "x"}
+        for i in range(4)
+    ]
+
+    bench = _MiniMC()
+
+    # Lenient (default): 2 fail (network), 2 ok → 2/2 scored = 1.000
+    adapter = _PartiallyFailingAdapter(fail_indices={0, 1})
+    r = await bench.run(adapter, items, model="m", concurrency=4, thinking="off")
+    assert r.error_breakdown.get("network") == 2
+    assert r.error_breakdown.get("ok") == 2
+    assert r.accuracy == pytest.approx(1.0)
+    assert r.denominator_policy == "lenient"
+
+    # Strict: 2 fail (network) + 2 ok → 2/4 = 0.500
+    adapter2 = _PartiallyFailingAdapter(fail_indices={0, 1})
+    r2 = await bench.run(adapter2, items, model="m", concurrency=4,
+                         thinking="off", strict_failures=True)
+    assert r2.accuracy == pytest.approx(0.5)
+    assert r2.denominator_policy == "strict"
+
+
 def test_wilson_ci_bounds():
     from llm_evalbox.eval.base import _wilson_ci
     lo, hi = _wilson_ci(50, 100)

@@ -7,11 +7,12 @@ from llm_evalbox.reports.json_report import (
     write_result_json,
     write_result_questions_jsonl,
 )
-from llm_evalbox.reports.table import render_run_table
+from llm_evalbox.reports.table import render_run_table, render_thinking_compare_table
 
 __all__ = [
     "SCHEMA_VERSION",
     "render_run_table",
+    "render_thinking_compare_table",
     "serialize_result",
     "write_result_json",
     "write_result_questions_jsonl",

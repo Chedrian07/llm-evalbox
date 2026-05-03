@@ -40,6 +40,7 @@ from llm_evalbox.eval.base import SamplingOverrides
 from llm_evalbox.pricing import PriceOverrides, cost_for_usage
 from llm_evalbox.reports import (
     render_run_table,
+    render_thinking_compare_table,
     serialize_result,
     write_result_json,
     write_result_questions_jsonl,
@@ -100,16 +101,20 @@ def cmd_run(
     tpm: int | None = typer.Option(None, "--tpm", envvar="EVALBOX_TPM"),
     thinking: str | None = typer.Option(None, "--thinking", envvar="EVALBOX_THINKING", help="auto | on | off"),
     no_thinking_rerun: bool = typer.Option(False, "--no-thinking-rerun"),
+    thinking_compare: bool = typer.Option(False, "--thinking-compare", help="Run twice (off + on) and print a delta table. Conflicts with --thinking auto."),
     temperature: float | None = typer.Option(None, "--temperature", envvar="EVALBOX_TEMPERATURE"),
     top_p: float | None = typer.Option(None, "--top-p", envvar="EVALBOX_TOP_P"),
     top_k: int | None = typer.Option(None, "--top-k", envvar="EVALBOX_TOP_K"),
     max_tokens: int | None = typer.Option(None, "--max-tokens"),
     reasoning_effort: str | None = typer.Option(None, "--reasoning-effort", envvar="EVALBOX_REASONING_EFFORT"),
     strict_deterministic: bool = typer.Option(False, "--strict-deterministic"),
+    strict_failures: bool = typer.Option(False, "--strict-failures", help="Include sandbox/network failures in accuracy denominator (academic mode)."),
     drop_params: str | None = typer.Option(None, "--drop-params", envvar="EVALBOX_DROP_PARAMS"),
     accept_code: bool = typer.Option(False, "--accept-code-exec"),
     no_code_bench: bool = typer.Option(False, "--no-code-bench"),
     lcb_cutoff: str | None = typer.Option(None, "--lcb-cutoff", help="LiveCodeBench: keep only items with release_date >= YYYY-MM-DD"),
+    no_cache: bool = typer.Option(False, "--no-cache", envvar="EVALBOX_NO_CACHE", help="Disable response cache."),
+    resume: bool = typer.Option(False, "--resume", help="Resume an interrupted run from --output-dir/state.json."),
     profile: str | None = typer.Option(None, "--profile"),
     env_file: str | None = typer.Option(None, "--env-file"),
     output_dir: Path | None = typer.Option(None, "--output-dir"),
@@ -197,8 +202,53 @@ def cmd_run(
 
     out_root = output_dir or Path("evalbox-runs")
     started_at = _utc_now_iso()
-    run_id = f"evalbox-{started_at.replace(':','-')}-{_slug(eff_model)}"
-    run_dir = out_root / run_id
+    if resume:
+        # Reuse the latest run-dir in out_root so subsequent runs land on the
+        # same path. Combined with the response cache, previously-computed
+        # questions return as cache hits (latency_ms=0); only missing ones hit
+        # the network. If no prior run exists, fall back to a fresh run-id.
+        candidates = (
+            sorted(out_root.glob("evalbox-*"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if out_root.exists() else []
+        )
+        if candidates:
+            run_dir = candidates[0]
+            run_id = run_dir.name
+            console.print(f"[bold yellow]--resume[/bold yellow] reusing {run_id}")
+            if no_cache:
+                console.print(
+                    "[yellow]warning:[/yellow] --resume with --no-cache won't skip work; "
+                    "drop --no-cache for the cache-hit fast path."
+                )
+        else:
+            run_id = f"evalbox-{started_at.replace(':','-')}-{_slug(eff_model)}"
+            run_dir = out_root / run_id
+            console.print(
+                f"[yellow]--resume[/yellow] but no prior run found in {out_root}; "
+                f"starting fresh: {run_id}"
+            )
+    else:
+        run_id = f"evalbox-{started_at.replace(':','-')}-{_slug(eff_model)}"
+        run_dir = out_root / run_id
+
+    if thinking_compare:
+        if (thinking or "").lower() == "auto":
+            console.print(
+                "[red]error:[/red] --thinking-compare conflicts with --thinking auto. "
+                "Use explicit modes (this flag will run both off and on for you)."
+            )
+            raise typer.Exit(2)
+        _run_thinking_compare(
+            base_url=eff_base_url, model=eff_model, adapter_kind=eff_adapter,
+            api_key=api_key, extra_headers=headers, benches=benches,
+            samples=eff_samples, concurrency=eff_concurrency, rpm=rpm, tpm=tpm,
+            no_thinking_rerun=no_thinking_rerun, sampling=sampling_obj,
+            user_drop=user_drop, strict=eff_strict, strict_failures=strict_failures,
+            no_cache=no_cache, run_id=run_id, run_dir=run_dir,
+            started_at=started_at, seed=eff_seed, save_questions=save_questions,
+            max_cost_usd=max_cost_usd, price_overrides=overrides,
+        )
+        return
 
     asyncio.run(
         _run_async(
@@ -217,6 +267,9 @@ def cmd_run(
             sampling=sampling_obj,
             user_drop=user_drop,
             strict=eff_strict,
+            strict_failures=strict_failures,
+            no_cache=no_cache,
+            resume=resume,
             run_id=run_id,
             run_dir=run_dir,
             started_at=started_at,
@@ -245,6 +298,9 @@ async def _run_async(
     sampling,
     user_drop,
     strict: bool,
+    strict_failures: bool,
+    no_cache: bool,
+    resume: bool,
     run_id: str,
     run_dir: Path,
     started_at: str,
@@ -252,7 +308,12 @@ async def _run_async(
     save_questions: bool,
     max_cost_usd: float | None,
     price_overrides: PriceOverrides,
-) -> None:
+    result_filename: str = "result.json",
+    questions_filename: str = "result.questions.jsonl",
+    print_table: bool = True,
+) -> tuple[list, dict]:
+    from llm_evalbox.cache import ResponseCache
+
     cap = capability_for(model)
     adapter = resolve_adapter(
         kind=adapter_kind,
@@ -260,6 +321,7 @@ async def _run_async(
         api_key=api_key,
         extra_headers=extra_headers,
     )
+    cache = ResponseCache(enabled=not no_cache)
 
     console.print(f"[bold]evalbox[/bold] {model} @ {base_url} (adapter={adapter.name})")
     console.print(f"  capability: temp={'✓' if cap.accepts_temperature else '✗'} "
@@ -307,7 +369,10 @@ async def _run_async(
                     sampling=sampling,
                     thinking=thinking,
                     strict_deterministic=strict,
+                    strict_failures=strict_failures,
                     no_thinking_rerun=no_thinking_rerun,
+                    cache=cache,
+                    base_url=base_url,
                 )
                 results.append(result)
 
@@ -357,17 +422,95 @@ async def _run_async(
             "accepts_reasoning_effort": cap.accepts_reasoning_effort,
         },
         strict_deterministic=strict,
+        strict_failures=strict_failures,
         benchmarks=results,
         costs=costs,
     )
 
-    write_result_json(run_dir / "result.json", payload)
+    write_result_json(run_dir / result_filename, payload)
     if save_questions:
-        write_result_questions_jsonl(run_dir / "result.questions.jsonl", results)
+        write_result_questions_jsonl(run_dir / questions_filename, results)
+
+    if print_table:
+        console.print()
+        render_run_table(results, costs=costs, console=console)
+        console.print(f"\nresults written to: [bold]{run_dir / result_filename}[/bold]")
+    return results, costs
+
+
+def _run_thinking_compare(
+    *,
+    base_url, model, adapter_kind, api_key, extra_headers, benches,
+    samples, concurrency, rpm, tpm,
+    no_thinking_rerun, sampling, user_drop, strict, strict_failures,
+    no_cache,
+    run_id, run_dir, started_at, seed, save_questions,
+    max_cost_usd, price_overrides,
+):
+    """Run benches twice (off + on) into the same run-dir, then print delta."""
+
+    # Need fresh benches each pass — some carry few-shot state set during
+    # load_dataset (e.g. MMLU). We accept duplicate dataset loads.
+    bench_classes = [type(b) for b in benches]
+
+    def _fresh():
+        out = []
+        for cls in bench_classes:
+            inst = cls()
+            # propagate optional knobs (e.g. lcb cutoff)
+            for attr in ("cutoff",):
+                v = getattr(benches[0] if benches else None, attr, None)
+                if v is not None and hasattr(inst, attr):
+                    setattr(inst, attr, v)
+            out.append(inst)
+        return out
+
+    console.rule("[bold]thinking=off[/bold]")
+    off_results, off_costs = asyncio.run(
+        _run_async(
+            base_url=base_url, model=model, adapter_kind=adapter_kind,
+            api_key=api_key, extra_headers=extra_headers, benches=_fresh(),
+            samples=samples, concurrency=concurrency, rpm=rpm, tpm=tpm,
+            thinking="off", no_thinking_rerun=no_thinking_rerun,
+            sampling=sampling, user_drop=user_drop,
+            strict=strict, strict_failures=strict_failures,
+            no_cache=no_cache, resume=False,
+            run_id=run_id, run_dir=run_dir, started_at=started_at, seed=seed,
+            save_questions=save_questions, max_cost_usd=max_cost_usd,
+            price_overrides=price_overrides,
+            result_filename="result-off.json",
+            questions_filename="result.questions-off.jsonl",
+            print_table=True,
+        )
+    )
+
+    console.rule("[bold]thinking=on[/bold]")
+    on_results, on_costs = asyncio.run(
+        _run_async(
+            base_url=base_url, model=model, adapter_kind=adapter_kind,
+            api_key=api_key, extra_headers=extra_headers, benches=_fresh(),
+            samples=samples, concurrency=concurrency, rpm=rpm, tpm=tpm,
+            thinking="on", no_thinking_rerun=no_thinking_rerun,
+            sampling=sampling, user_drop=user_drop,
+            strict=strict, strict_failures=strict_failures,
+            no_cache=no_cache, resume=False,
+            run_id=run_id, run_dir=run_dir, started_at=_utc_now_iso(), seed=seed,
+            save_questions=save_questions, max_cost_usd=max_cost_usd,
+            price_overrides=price_overrides,
+            result_filename="result-on.json",
+            questions_filename="result.questions-on.jsonl",
+            print_table=True,
+        )
+    )
 
     console.print()
-    render_run_table(results, costs=costs, console=console)
-    console.print(f"\nresults written to: [bold]{run_dir}[/bold]")
+    console.rule("[bold]delta (on − off)[/bold]")
+    render_thinking_compare_table(
+        off_results, on_results,
+        off_costs=off_costs, on_costs=on_costs, console=console,
+    )
+    console.print(f"\nresults written to: [bold]{run_dir}[/bold]  "
+                  "(result-off.json + result-on.json)")
 
 
 # ============================================================ doctor
@@ -410,14 +553,49 @@ async def _doctor_async(base_url: str, model: str, adapter_kind: str, api_key: s
     except EvalBoxError as e:
         console.print(f"  /v1/models: [red]{e}[/red]")
 
-    try:
+    # Adaptive dry chat: send a probe; on 4xx with a recognizable
+    # "unsupported param" message, strip the offending key and retry.
+    # Keeps doctor useful for endpoints whose accept-list differs from
+    # the static capability matrix (gateways, custom proxies).
+    from llm_evalbox.adapters.capabilities import parse_unsupported_param_error
+    from llm_evalbox.core.exceptions import BadRequestError
+
+    drop_params: list[str] = []
+    resp = None
+    last_error: BadRequestError | None = None
+    for attempt in range(3):
         req = ChatRequest(
             model=model,
             messages=[Message(role="user", content="Reply with the single word: OK")],
             max_tokens=8,
             thinking="auto",
+            drop_params=list(drop_params),
         )
-        resp = await adapter.chat(req)
+        try:
+            resp = await adapter.chat(req)
+            break
+        except BadRequestError as e:
+            last_error = e
+            unsupported = parse_unsupported_param_error(str(e))
+            new = sorted(k for k in unsupported if k not in drop_params)
+            if not new:
+                # Couldn't parse — bail out and report the raw error.
+                break
+            drop_params.extend(new)
+            console.print(
+                f"  [yellow]4xx noted:[/yellow] adding drop_params={new} "
+                f"(attempt {attempt + 1}/3), retrying…"
+            )
+        except EvalBoxError as e:
+            console.print(f"  dry chat: [red]{e}[/red]")
+            await adapter.close()
+            raise typer.Exit(1) from None
+
+    try:
+        if resp is None:
+            console.print(f"  dry chat: [red]{last_error}[/red]")
+            raise typer.Exit(1)
+
         console.print(f"  dry chat: {resp.latency_ms:.0f}ms — finish={resp.finish_reason} "
                       f"thinking_observed={resp.thinking_observed}")
         console.print(f"           text: {resp.text[:80]!r}")
@@ -425,9 +603,13 @@ async def _doctor_async(base_url: str, model: str, adapter_kind: str, api_key: s
             console.print(f"           usage: prompt={resp.usage.prompt_tokens} "
                           f"completion={resp.usage.completion_tokens} "
                           f"reasoning={resp.usage.reasoning_tokens}")
-    except EvalBoxError as e:
-        console.print(f"  dry chat: [red]{e}[/red]")
-        raise typer.Exit(1) from None
+        if drop_params:
+            console.print(
+                f"  [bold yellow]learned drop_params:[/bold yellow] "
+                f"{','.join(drop_params)}  "
+                f"(re-use via --drop-params {','.join(drop_params)} or "
+                f"EVALBOX_DROP_PARAMS={','.join(drop_params)})"
+            )
     finally:
         await adapter.close()
 

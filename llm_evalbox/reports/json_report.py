@@ -61,6 +61,8 @@ def _benchmark_to_dict(b: BenchmarkResult, *, cost: float | None) -> dict[str, A
         "cost_usd_estimated": cost,
         "duration_s": b.duration_s,
         "thinking_used": b.thinking_used,
+        "denominator_policy": b.denominator_policy,
+        "cache_hits": sum(1 for q in b.questions if q.cache_hit),
     }
 
 
@@ -75,6 +77,7 @@ def serialize_result(
     thinking: dict[str, Any],
     capability: dict[str, Any],
     strict_deterministic: bool,
+    strict_failures: bool,
     benchmarks: list[BenchmarkResult],
     costs: dict[str, float | None],
 ) -> dict[str, Any]:
@@ -101,6 +104,7 @@ def serialize_result(
         "thinking": thinking,
         "capability": capability,
         "strict_deterministic": strict_deterministic,
+        "strict_failures": strict_failures,
         "benchmarks": bench_dicts,
         "totals": {
             "accuracy_macro": macro_acc,

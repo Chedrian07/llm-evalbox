@@ -124,7 +124,7 @@ def capability_for(model: str) -> Capability:
 
 
 # The full set of keys an adapter might place on the wire body.
-_KNOWN_SAMPLING_KEYS: tuple[str, ...] = (
+KNOWN_SAMPLING_KEYS: tuple[str, ...] = (
     "temperature",
     "top_p",
     "top_k",
@@ -136,6 +136,58 @@ _KNOWN_SAMPLING_KEYS: tuple[str, ...] = (
     "response_format",
     "reasoning_effort",
 )
+# Backward-compat alias (was private).
+_KNOWN_SAMPLING_KEYS = KNOWN_SAMPLING_KEYS
+
+# Patterns that match common 4xx "this parameter is unsupported" messages
+# returned by various OpenAI-compatible gateways (OpenAI public, vLLM, SGLang,
+# Together, Fireworks, OpenRouter, custom proxies). The captured group is the
+# offending parameter name. We keep the patterns lenient — if a gateway uses a
+# format we don't recognize, doctor's adaptation just stops; the user can fall
+# back to --drop-params.
+# `_Q` allows any combination of escaped/unescaped quotes around a token —
+# many gateways embed messages inside JSON, so the quotes arrive escaped
+# (e.g. `\"minimal\"`). Repeated to also handle the trailing quote.
+_Q = r"[\\'\"`]*"
+
+_UNSUPPORTED_PARAM_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(rf"unrecognized\s+parameter[s]?:?\s*{_Q}(\w+){_Q}", re.I),
+    re.compile(rf"{_Q}(\w+){_Q}\s+is\s+not\s+(?:supported|allowed|recognized)", re.I),
+    re.compile(rf"unknown\s+(?:argument|key|parameter|field):\s*{_Q}(\w+){_Q}", re.I),
+    re.compile(rf"invalid\s+value\s+for\s+{_Q}(\w+){_Q}", re.I),
+    re.compile(rf"parameter\s+{_Q}(\w+){_Q}\s+(?:is\s+)?(?:not\s+supported|invalid|unknown)", re.I),
+    # gpt-5.4-mini / cliproxy: 'level "minimal" not supported'
+    # → reasoning_effort capability mismatch. We map the value name back to the
+    # parameter when the offending value is a known reasoning_effort level.
+    re.compile(rf"level\s+{_Q}(?P<val>minimal|low|medium|high|xhigh){_Q}\s+not\s+supported", re.I),
+)
+
+# Map values that show up in error messages back to the parameter name.
+_VALUE_TO_PARAM = {
+    "minimal": "reasoning_effort",
+    "low": "reasoning_effort",
+    "medium": "reasoning_effort",
+    "high": "reasoning_effort",
+    "xhigh": "reasoning_effort",
+}
+
+
+def parse_unsupported_param_error(message: str) -> set[str]:
+    """Heuristic parse of a 4xx body to extract names of unsupported sampling keys.
+
+    Returns a set of names that match `KNOWN_SAMPLING_KEYS`. Other tokens
+    captured by the patterns are filtered out so we don't accidentally drop
+    fields we control (model, messages, etc.).
+    """
+    found: set[str] = set()
+    for rx in _UNSUPPORTED_PARAM_PATTERNS:
+        for m in rx.finditer(message or ""):
+            name = m.group("val") if "val" in m.groupdict() else m.group(1)
+            # Map specific values back to their parameter (e.g. "minimal" → reasoning_effort)
+            mapped = _VALUE_TO_PARAM.get(name.lower(), name)
+            if mapped in KNOWN_SAMPLING_KEYS:
+                found.add(mapped)
+    return found
 
 
 def _accept_for(cap: Capability, key: str) -> bool:
