@@ -7,6 +7,7 @@ import httpx
 import pytest
 import respx
 
+from llm_evalbox.adapters.capabilities import capability_for
 from llm_evalbox.adapters.responses import ResponsesAdapter
 from llm_evalbox.core.exceptions import BadRequestError
 from llm_evalbox.core.messages import Message
@@ -149,6 +150,31 @@ async def test_body_serializes_messages_to_input():
     assert "max_tokens" not in body
     # thinking on → reasoning.effort set
     assert body["reasoning"]["effort"] in ("high", "medium", "low", "xhigh")
+
+
+def test_responses_forwards_explicit_none_effort():
+    a = ResponsesAdapter("https://api.test/v1", api_key="sk-x")
+    req = ChatRequest(
+        model="gpt-5.4-mini",
+        messages=[Message(role="user", content="hi")],
+        thinking="off",
+        reasoning_effort="none",
+    )
+    body = a._build_body(req, capability_for(req.model))
+    assert body["reasoning"]["effort"] == "none"
+
+
+def test_responses_drop_params_strips_nested_reasoning():
+    a = ResponsesAdapter("https://api.test/v1", api_key="sk-x")
+    req = ChatRequest(
+        model="gpt-5.4-mini",
+        messages=[Message(role="user", content="hi")],
+        thinking="off",
+        reasoning_effort="none",
+        drop_params=["reasoning_effort"],
+    )
+    body = a._build_body(req, capability_for(req.model))
+    assert "reasoning" not in body
 
 
 @pytest.mark.asyncio

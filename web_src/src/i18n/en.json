@@ -22,6 +22,7 @@
     "adapter_auto": "auto (chat_completions)",
     "adapter_chat": "chat_completions",
     "adapter_responses": "responses (OpenAI o-series / gpt-5)",
+    "api_key_env": "API key env",
     "api_key": "API key",
     "api_key_placeholder": "sk-... (kept in memory only, never echoed)",
     "test": "Test connection",
@@ -66,16 +67,44 @@
     "multilingual": "Multilingual",
     "safety": "Safety / Fairness",
     "other": "Other",
+    "all_categories": "All categories",
+    "search_placeholder": "Search benchmarks",
+    "select_visible": "Select visible",
+    "clear_visible": "Clear visible",
+    "selected_count": "{{count}} selected",
+    "no_matches": "No benchmarks match the current filter.",
     "code_warning": "This benchmark runs model-generated code locally. Toggle below to opt in.",
     "samples": "Samples per benchmark",
-    "samples_help": "0 = full set"
+    "samples_help": "0 = full set",
+    "full_set": "full"
   },
   "options": {
     "title": "Options",
     "concurrency": "Concurrency",
     "accept_code_exec": "Allow local code execution (HumanEval / MBPP / LiveCodeBench)",
     "strict_failures": "Strict denominator (count sandbox/network errors as wrong)",
-    "max_cost_usd": "Max cost (USD)"
+    "no_cache": "Disable response cache for this run",
+    "prompt_cache_aware": "Use stable prompt-cache prefix",
+    "no_thinking_rerun": "Do not rerun first batch when thinking is detected",
+    "reasoning_effort": "Reasoning effort",
+    "reasoning_default": "provider default",
+    "fast_none_preset": "Fast none-effort preset",
+    "fast_none_preset_help": "Set thinking off, disable the auto rerun, and send reasoning_effort=none.",
+    "drop_params": "Drop params",
+    "drop_params_help": "Comma-separated parameters stripped before requests.",
+    "max_cost_usd": "Max cost (USD)",
+    "no_cache_short": "no cache",
+    "prompt_cache_short": "prompt cache",
+    "strict_short": "strict",
+    "no_rerun_short": "no rerun"
+  },
+  "plan": {
+    "title": "Run plan",
+    "benchmarks": "benchmarks",
+    "samples": "samples",
+    "concurrency": "concurrency",
+    "thinking": "thinking",
+    "default_flags": "Default runtime flags"
   },
   "cost": {
     "title": "Estimated cost",
@@ -85,15 +114,30 @@
   },
   "run": {
     "start": "Run benchmarks",
+    "starting": "Starting…",
     "no_benches": "Select at least one benchmark",
     "code_consent_required": "Accept local code execution to include code benchmarks",
     "cancel": "Cancel run",
     "running_accuracy": "Running accuracy",
-    "thinking_on": "thinking on"
+    "thinking_on": "thinking on",
+    "loading": "loading dataset",
+    "completed": "completed",
+    "finalizing": "finalizing result",
+    "progress": "Progress",
+    "cost_so_far": "Cost so far",
+    "no_cap": "no cap",
+    "elapsed": "Elapsed",
+    "eta": "ETA",
+    "eta_unknown": "ETA pending",
+    "active_benches": "Active benches",
+    "events": "Event log"
   },
   "results": {
     "title": "Results",
     "matrix": "Matrix",
+    "radar": "Radar",
+    "scatter": "Cost × Acc",
+    "diff": "Diff",
     "raw": "Raw JSON",
     "new_run": "New run",
     "totals": "totals",
@@ -106,8 +150,16 @@
     "completion": "compl.",
     "reasoning": "reasoning",
     "cost": "cost",
+    "macro": "macro",
+    "tokens": "tokens",
+    "cache_hits": "cache hits",
+    "response_cache": "response cache",
     "category": "category",
     "errors": "errors"
+  },
+  "history": {
+    "title": "History",
+    "clear": "Clear"
   },
   "error": {
     "title": "Error",

@@ -103,7 +103,7 @@ def _run_in_docker(
             return SandboxResult(
                 passed=False,
                 error_kind="timeout",
-                stdout=(e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, (bytes, bytearray)) else (e.stdout or ""))[:2000],
+                stdout=(e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes | bytearray) else (e.stdout or ""))[:2000],
                 stderr="docker timeout",
                 returncode=-1,
                 elapsed_s=elapsed,

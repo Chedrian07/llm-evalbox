@@ -55,6 +55,7 @@ class PricingEstimateRequest(BaseModel):
     model: str
     benchmarks: list[str]
     samples: int = 200
+    concurrency: int = 8
     thinking: Literal["auto", "on", "off"] = "auto"
 
 
@@ -73,6 +74,7 @@ class RunCreateRequest(BaseModel):
     concurrency: int = 8
     thinking: Literal["auto", "on", "off"] = "auto"
     no_thinking_rerun: bool = False
+    prompt_cache_aware: bool = False
     accept_code_exec: bool = False
     strict_failures: bool = False
     no_cache: bool = False

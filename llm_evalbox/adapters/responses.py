@@ -157,6 +157,11 @@ class ResponsesAdapter(ChatAdapter):
         # Capability strip uses the same key set as chat-completions; the
         # adapter-side rename of max_tokens → max_output_tokens already happened.
         body = strip_unsupported_keys(body, cap, user_drop=req.drop_params)
+        if body.get("reasoning") and (
+            not cap.accepts_reasoning_effort
+            or "reasoning_effort" in set(req.drop_params or [])
+        ):
+            body.pop("reasoning", None)
         return body
 
     # ------------------------------------------------------------------- send

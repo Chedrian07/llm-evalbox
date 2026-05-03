@@ -10,6 +10,17 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
 
+const API_KEY_ENVS = [
+  "OPENAI_API_KEY",
+  "OPENROUTER_API_KEY",
+  "TOGETHER_API_KEY",
+  "FIREWORKS_API_KEY",
+  "VLLM_KEY",
+  "GEMINI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "E2B_API_KEY",
+];
+
 export function ConnectionCard({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
   const s = useApp();
@@ -30,7 +41,7 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
     }, 350);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.hydrated, s.baseUrl, s.adapter, s.apiKeyEnv, compact]);
+  }, [s.hydrated, s.baseUrl, s.adapter, s.apiKey, s.apiKeyEnv, compact]);
 
   async function test() {
     setBusy(true);
@@ -112,12 +123,26 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
             <Label>{t("connection.adapter")}</Label>
             <select
               value={s.adapter}
-              onChange={(e) => s.setConnection({ adapter: e.target.value as any })}
+              onChange={(e) => s.setConnection({ adapter: e.target.value as typeof s.adapter })}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             >
               <option value="auto">{t("connection.adapter_auto")}</option>
               <option value="chat_completions">{t("connection.adapter_chat")}</option>
               <option value="responses">{t("connection.adapter_responses")}</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label>{t("connection.api_key_env")}</Label>
+            <select
+              value={s.apiKeyEnv}
+              onChange={(e) => s.setConnection({ apiKeyEnv: e.target.value })}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+            >
+              {API_KEY_ENVS.map((name) => (
+                <option key={name} value={name}>
+                  {name}{s.serverApiKeys[name] ? " ✓" : ""}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-1">

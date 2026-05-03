@@ -52,6 +52,7 @@ def test_pricing_estimate(client):
         "model": "gpt-4o-mini",
         "benchmarks": ["mmlu", "gsm8k"],
         "samples": 100,
+        "concurrency": 4,
         "thinking": "off",
     })
     assert r.status_code == 200
@@ -60,6 +61,26 @@ def test_pricing_estimate(client):
     # gpt-4o-mini is in the catalog → cost should be a number
     assert body["est_cost_usd"] is not None
     assert body["est_seconds"] > 0
+
+
+@respx.mock
+def test_models_post_uses_inline_api_key(client):
+    def _handler(request):
+        assert request.headers.get("authorization") == "Bearer sk-inline"
+        return httpx.Response(200, json={
+            "data": [{"id": "fake-model", "owned_by": "test"}]
+        })
+
+    respx.get("https://api.test/v1/models").mock(side_effect=_handler)
+
+    r = client.post("/api/models", json={
+        "base_url": "https://api.test/v1",
+        "model": "fake-model",
+        "adapter": "chat_completions",
+        "api_key": "sk-inline",
+    })
+    assert r.status_code == 200
+    assert r.json()[0]["id"] == "fake-model"
 
 
 @respx.mock
@@ -178,6 +199,62 @@ async def test_runs_lifecycle():
         assert detail["status"] == "completed", detail
         assert detail["result"] is not None
         assert detail["result"]["benchmarks"][0]["name"] == "mmlu"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_runs_prompt_cache_aware_reaches_benchmark():
+    import asyncio as _asyncio
+
+    from httpx import ASGITransport, AsyncClient
+
+    from llm_evalbox.eval._cache_aware import PROMPT_CACHE_PREFIX
+
+    seen_messages: list[list[dict]] = []
+
+    def _handler(request):
+        import json as _json
+        seen_messages.append(_json.loads(request.content)["messages"])
+        return httpx.Response(200, json={
+            "id": "x", "model": "gpt-4o-mini",
+            "choices": [{"index": 0, "finish_reason": "stop",
+                         "message": {"role": "assistant", "content": "B"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11},
+        })
+
+    respx.post("https://api.test/v1/chat/completions").mock(side_effect=_handler)
+
+    app = build_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://t") as ac:
+        r = await ac.post("/api/runs", json={
+            "connection": {
+                "base_url": "https://api.test/v1",
+                "model": "gpt-4o-mini",
+                "adapter": "chat_completions",
+                "api_key": "sk-x",
+            },
+            "benches": ["mmlu"],
+            "samples": 1,
+            "concurrency": 1,
+            "thinking": "off",
+            "prompt_cache_aware": True,
+            "no_cache": True,
+        })
+        assert r.status_code == 200
+        rid = r.json()["run_id"]
+
+        detail = None
+        for _ in range(200):
+            detail = (await ac.get(f"/api/runs/{rid}")).json()
+            if detail["status"] in ("completed", "failed", "cancelled"):
+                break
+            await _asyncio.sleep(0.05)
+
+    assert detail is not None and detail["status"] == "completed"
+    assert seen_messages
+    assert seen_messages[0][0]["role"] == "system"
+    assert seen_messages[0][0]["content"] == PROMPT_CACHE_PREFIX
 
 
 @respx.mock

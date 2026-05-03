@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
+import { Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
@@ -76,6 +78,76 @@ export function OptionsCard() {
             />
             <span>{t("options.strict_failures")}</span>
           </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={s.noCache}
+              onChange={(e) => s.setNoCache(e.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            <span>{t("options.no_cache")}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={s.promptCacheAware}
+              onChange={(e) => s.setPromptCacheAware(e.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            <span>{t("options.prompt_cache_aware")}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={s.noThinkingRerun}
+              onChange={(e) => s.setNoThinkingRerun(e.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            <span>{t("options.no_thinking_rerun")}</span>
+          </label>
+        </div>
+        <div className="grid gap-3 border-t pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              s.setThinking("off");
+              s.setNoThinkingRerun(true);
+              s.setReasoningEffort("none");
+            }}
+            title={t("options.fast_none_preset_help")}
+            className="w-full justify-start"
+          >
+            <Zap className="h-4 w-4" />
+            {t("options.fast_none_preset")}
+          </Button>
+          <div className="space-y-1">
+            <Label>{t("options.reasoning_effort")}</Label>
+            <select
+              value={s.reasoningEffort ?? ""}
+              onChange={(e) => s.setReasoningEffort(e.target.value || null)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+            >
+              <option value="">{t("options.reasoning_default")}</option>
+              <option value="none">none</option>
+              <option value="minimal">minimal</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="xhigh">xhigh</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label>{t("options.drop_params")}</Label>
+            <Input
+              value={s.dropParams}
+              placeholder="top_k,reasoning_effort"
+              onChange={(e) => s.setDropParams(e.target.value)}
+              spellCheck={false}
+            />
+            <p className="text-xs text-muted-foreground">{t("options.drop_params_help")}</p>
+          </div>
         </div>
       </CardContent>
     </Card>

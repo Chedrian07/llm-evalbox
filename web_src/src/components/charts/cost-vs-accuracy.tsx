@@ -29,12 +29,19 @@ interface Props {
   runs: HistoryEntry[];
 }
 
+interface Point {
+  x: number;
+  y: number;
+  bench: string;
+  run_id: string;
+}
+
 export function CostVsAccuracyChart({ runs }: Props) {
   if (runs.length === 0) {
     return <p className="text-sm text-muted-foreground">No runs in history yet.</p>;
   }
 
-  const byModel = new Map<string, any[]>();
+  const byModel = new Map<string, Point[]>();
   for (const r of runs) {
     const model = r.model || "?";
     for (const b of r.result?.benchmarks ?? []) {
@@ -81,13 +88,14 @@ export function CostVsAccuracyChart({ runs }: Props) {
             background: "hsl(var(--card))",
             border: "1px solid hsl(var(--border))",
           }}
-          formatter={(v: any, n: string) => {
-            if (n === "x") return [`$${v.toFixed(4)}`, "cost"];
-            if (n === "y") return [v.toFixed(3), "accuracy"];
-            return [v, n];
+          formatter={(v: unknown, n: string) => {
+            const num = typeof v === "number" ? v : Number(v);
+            if (n === "x") return [`$${num.toFixed(4)}`, "cost"];
+            if (n === "y") return [num.toFixed(3), "accuracy"];
+            return [String(v), n];
           }}
           labelFormatter={(_, payload) => {
-            const p = (payload && payload[0]?.payload) as any;
+            const p = payload?.[0]?.payload as Point | undefined;
             return p ? `${p.bench}` : "";
           }}
         />

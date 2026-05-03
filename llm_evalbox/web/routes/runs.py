@@ -183,6 +183,7 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
                     strict_failures=req.strict_failures,
                     cache=cache,
                     base_url=req.connection.base_url,
+                    prompt_cache_aware=req.prompt_cache_aware,
                     initial_drop_params=seeded_drops,
                 )
                 results.append(result)
@@ -237,7 +238,14 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
                 "base_url": req.connection.base_url,
                 "model": req.connection.model,
             },
-            sampling={"concurrency": req.concurrency},
+            sampling={
+                "concurrency": req.concurrency,
+                "no_cache": req.no_cache,
+                "prompt_cache_aware": req.prompt_cache_aware,
+                "no_thinking_rerun": req.no_thinking_rerun,
+                "max_cost_usd": req.max_cost_usd,
+                **req.sampling,
+            },
             thinking={"mode": req.thinking, "used": any(r.thinking_used for r in results)},
             capability={
                 "accepts_temperature": cap.accepts_temperature,

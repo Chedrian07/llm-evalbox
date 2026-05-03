@@ -10,8 +10,9 @@ import { AnswerDiff } from "@/components/charts/answer-diff";
 import { CostVsAccuracyChart } from "@/components/charts/cost-vs-accuracy";
 import { RadarChartComparison } from "@/components/charts/radar-chart";
 import { RunHistorySidebar } from "@/components/run-history-sidebar";
+import { api, type BenchmarkResult, type RunResult } from "@/lib/api";
 import { useApp } from "@/lib/store";
-import { listHistory, saveHistory, type HistoryEntry } from "@/lib/history";
+import { listMergedHistory, saveHistory, type HistoryEntry } from "@/lib/history";
 import { fmtAcc, fmtCost, fmtMs, fmtNum } from "@/lib/format";
 
 type Tab = "matrix" | "radar" | "scatter" | "diff" | "raw";
@@ -43,7 +44,7 @@ export function ResultsPage() {
 
   // Initial history load (used by Radar / Scatter / Diff even before a save).
   useEffect(() => {
-    listHistory()
+    listMergedHistory()
       .then(setHistory)
       .catch(() => {});
   }, [refreshKey]);
@@ -78,13 +79,7 @@ export function ResultsPage() {
 
   async function share() {
     if (!s.runId) return;
-    const resp = await fetch("/api/shares", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ run_id: s.runId }),
-    });
-    if (!resp.ok) return;
-    const j = await resp.json();
+    const j = await api.shareRun(s.runId);
     setShareUrl(j.url);
   }
 
@@ -98,9 +93,9 @@ export function ResultsPage() {
               <span>{t("results.title")}</span>
               <div className="flex flex-wrap items-center gap-1">
                 <TabBtn label={t("results.matrix")} on={tab === "matrix"} onClick={() => setTab("matrix")} />
-                <TabBtn label="Radar" on={tab === "radar"} onClick={() => setTab("radar")} />
-                <TabBtn label="Cost × Acc" on={tab === "scatter"} onClick={() => setTab("scatter")} />
-                <TabBtn label="Diff" on={tab === "diff"} onClick={() => setTab("diff")} />
+                <TabBtn label={t("results.radar")} on={tab === "radar"} onClick={() => setTab("radar")} />
+                <TabBtn label={t("results.scatter")} on={tab === "scatter"} onClick={() => setTab("scatter")} />
+                <TabBtn label={t("results.diff")} on={tab === "diff"} onClick={() => setTab("diff")} />
                 <TabBtn label={t("results.raw")} on={tab === "raw"} onClick={() => setTab("raw")} />
                 <Button size="sm" variant="outline" onClick={() => exportFile("md")}>
                   <Download className="h-3 w-3" /> .md
@@ -136,24 +131,36 @@ export function ResultsPage() {
             )}
             {!r ? (
               <p className="text-sm text-muted-foreground">…</p>
-            ) : tab === "matrix" ? (
-              <Matrix r={r} />
-            ) : tab === "radar" ? (
-              <RadarChartComparison runs={history} />
-            ) : tab === "scatter" ? (
-              <CostVsAccuracyChart runs={history} />
-            ) : tab === "diff" ? (
-              <AnswerDiff runs={history} />
             ) : (
-              <pre className="overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed">
-                {JSON.stringify(r, null, 2)}
-              </pre>
+              <div className="space-y-4">
+                <SummaryCards r={r} />
+                {tab === "matrix" ? (
+                  <Matrix r={r} />
+                ) : tab === "radar" ? (
+                  <RadarChartComparison runs={history} />
+                ) : tab === "scatter" ? (
+                  <CostVsAccuracyChart runs={history} />
+                ) : tab === "diff" ? (
+                  <AnswerDiff runs={history} />
+                ) : (
+                  <pre className="overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed">
+                    {JSON.stringify(r, null, 2)}
+                  </pre>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <RunHistorySidebar refreshKey={refreshKey} onChange={setHistory} />
+      <RunHistorySidebar
+        refreshKey={refreshKey}
+        onChange={setHistory}
+        onSelect={(entry) => {
+          s.setRunId(entry.run_id);
+          s.setFinalResult(entry.result);
+        }}
+      />
     </div>
   );
 }
@@ -166,10 +173,39 @@ function TabBtn({ label, on, onClick }: { label: string; on: boolean; onClick: (
   );
 }
 
-function Matrix({ r }: { r: any }) {
+function SummaryCards({ r }: { r: RunResult }) {
   const { t } = useTranslation();
-  const benches = (r.benchmarks ?? []) as any[];
   const totals = r.totals ?? {};
+  const tokens = totals.tokens ?? {};
+  const benches = r.benchmarks ?? [];
+  const sampleCount = benches.reduce((acc, b) => acc + (b.samples ?? 0), 0);
+  const cacheHits = benches.reduce((acc, b) => acc + (b.cache_hits ?? 0), 0);
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <SummaryMetric label={t("results.accuracy")} value={fmtAcc(totals.accuracy_macro)} detail={t("results.macro")} />
+      <SummaryMetric label={t("results.cost")} value={fmtCost(totals.cost_usd_estimated)} detail={r.provider?.model ?? "?"} />
+      <SummaryMetric label={t("results.samples")} value={fmtNum(sampleCount)} detail={`${benches.length} ${t("plan.benchmarks")}`} />
+      <SummaryMetric label={t("results.tokens")} value={fmtNum((tokens.prompt ?? 0) + (tokens.completion ?? 0) + (tokens.reasoning ?? 0))} detail={`cached ${fmtNum(tokens.cached_prompt)}`} />
+      <SummaryMetric label={t("results.cache_hits")} value={fmtNum(cacheHits)} detail={r.sampling?.prompt_cache_aware ? t("options.prompt_cache_short") : t("results.response_cache")} />
+    </div>
+  );
+}
+
+function SummaryMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-md border border-input p-3">
+      <div className="text-[0.7rem] uppercase text-muted-foreground">{label}</div>
+      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-1 truncate text-xs text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function Matrix({ r }: { r: RunResult }) {
+  const { t } = useTranslation();
+  const benches = (r.benchmarks ?? []) as BenchmarkResult[];
+  const totals = r.totals;
+  const tokens = totals?.tokens;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -188,7 +224,7 @@ function Matrix({ r }: { r: any }) {
           </tr>
         </thead>
         <tbody>
-          {benches.map((b: any) => (
+          {benches.map((b) => (
             <tr key={b.name} className="border-b last:border-b-0">
               <td className="px-2 py-2 font-medium">
                 <div className="flex items-center gap-1.5">
@@ -215,13 +251,13 @@ function Matrix({ r }: { r: any }) {
             <td className="px-2 py-2 text-right tabular-nums">
               {benches.reduce((acc, b) => acc + (b.samples ?? 0), 0)}
             </td>
-            <td className="px-2 py-2 text-right tabular-nums">{fmtAcc(totals.accuracy_macro)}</td>
+            <td className="px-2 py-2 text-right tabular-nums">{fmtAcc(totals?.accuracy_macro)}</td>
             <td className="px-2 py-2 text-right text-muted-foreground">macro</td>
             <td colSpan={2}></td>
-            <td className="px-2 py-2 text-right tabular-nums">{fmtNum(totals.tokens?.prompt)}</td>
-            <td className="px-2 py-2 text-right tabular-nums">{fmtNum(totals.tokens?.completion)}</td>
-            <td className="px-2 py-2 text-right tabular-nums">{fmtNum(totals.tokens?.reasoning)}</td>
-            <td className="px-2 py-2 text-right tabular-nums">{fmtCost(totals.cost_usd_estimated)}</td>
+            <td className="px-2 py-2 text-right tabular-nums">{fmtNum(tokens?.prompt)}</td>
+            <td className="px-2 py-2 text-right tabular-nums">{fmtNum(tokens?.completion)}</td>
+            <td className="px-2 py-2 text-right tabular-nums">{fmtNum(tokens?.reasoning)}</td>
+            <td className="px-2 py-2 text-right tabular-nums">{fmtCost(totals?.cost_usd_estimated)}</td>
           </tr>
         </tbody>
       </table>
@@ -231,7 +267,7 @@ function Matrix({ r }: { r: any }) {
 
 // Lightweight client-side renderers so the SPA can export without the
 // backend. Loose mirrors of `reports/markdown.py` / `reports/html.py`.
-function renderRunMd(r: any): string {
+function renderRunMd(r: RunResult): string {
   const p = r.provider ?? {};
   const t = r.totals ?? {};
   const lines: string[] = [];
@@ -251,7 +287,7 @@ function renderRunMd(r: any): string {
   return lines.join("\n") + "\n";
 }
 
-function renderRunHtml(r: any): string {
+function renderRunHtml(r: RunResult): string {
   const md = renderRunMd(r).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   return `<!doctype html><html><head><meta charset="utf-8">
 <title>evalbox · ${r.provider?.model ?? "run"}</title>

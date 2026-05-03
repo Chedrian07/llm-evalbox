@@ -3,7 +3,14 @@
 
 import { create } from "zustand";
 import { api } from "./api";
-import type { CapabilityInfo, ConnectionResponse, ModelInfo, ServerDefaults } from "./api";
+import type {
+  BenchmarkResult,
+  CapabilityInfo,
+  ConnectionResponse,
+  ModelInfo,
+  RunResult,
+  ServerDefaults,
+} from "./api";
 
 export type Stage = "setup" | "running" | "results";
 
@@ -14,7 +21,7 @@ export interface BenchProgress {
   running_accuracy: number;
   thinking_used: boolean;
   done: boolean;
-  result?: any;
+  result?: BenchmarkResult;
 }
 
 interface AppState {
@@ -72,6 +79,8 @@ interface AppState {
   setReasoningEffort: (s: string | null) => void;
   noCache: boolean;
   setNoCache: (b: boolean) => void;
+  dropParams: string;
+  setDropParams: (s: string) => void;
   maxCostUsd: number | null;
   setMaxCostUsd: (n: number | null) => void;
 
@@ -83,8 +92,8 @@ interface AppState {
   benchProgress: Record<string, BenchProgress>;
   resetBenchProgress: () => void;
   updateBenchProgress: (b: string, patch: Partial<BenchProgress>) => void;
-  finalResult: any | null;
-  setFinalResult: (r: any | null) => void;
+  finalResult: RunResult | null;
+  setFinalResult: (r: RunResult | null) => void;
 }
 
 // Module-level token so concurrent loadModels() calls cancel earlier in-flights.
@@ -123,14 +132,16 @@ export const useApp = create<AppState>((set, get) => ({
       set({ availableModels: [], modelsError: null, modelsKey: null });
       return;
     }
-    const key = `${baseUrl}|${s.adapter}|${s.apiKeyEnv}`;
+    const key = `${baseUrl}|${s.adapter}|${s.apiKey ? "direct" : s.apiKeyEnv}`;
     if (!opts?.force && key === s.modelsKey && s.availableModels.length > 0) return;
     const token = ++_modelsLoadToken;
     set({ modelsLoading: true, modelsError: null });
     try {
       const list = await api.listModels({
         base_url: baseUrl,
+        model: s.model,
         adapter: s.adapter,
+        api_key: s.apiKey || undefined,
         api_key_env: s.apiKeyEnv,
       });
       if (token !== _modelsLoadToken) return; // stale
@@ -178,6 +189,7 @@ export const useApp = create<AppState>((set, get) => ({
         strictFailures: d.strict_failures ?? prev.strictFailures,
         noThinkingRerun: d.no_thinking_rerun ?? prev.noThinkingRerun,
         promptCacheAware: d.prompt_cache_aware ?? prev.promptCacheAware,
+        dropParams: d.drop_params ?? prev.dropParams,
         hasServerApiKey: d.has_api_key,
         serverApiKeys: d.api_keys ?? {},
         hydrated: true,
@@ -210,6 +222,8 @@ export const useApp = create<AppState>((set, get) => ({
   setReasoningEffort: (s) => set({ reasoningEffort: s }),
   noCache: false,
   setNoCache: (b) => set({ noCache: b }),
+  dropParams: "",
+  setDropParams: (s) => set({ dropParams: s }),
   maxCostUsd: 5.0,
   setMaxCostUsd: (n) => set({ maxCostUsd: n }),
 

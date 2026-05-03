@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
+from llm_evalbox.cache import clear_runs as _clear
 from llm_evalbox.cache import delete_run as _delete
 from llm_evalbox.cache import get_run as _get
 from llm_evalbox.cache import list_runs as _list
@@ -33,3 +34,8 @@ def delete_history(run_id: str) -> dict[str, str]:
     if not _delete(run_id):
         raise HTTPException(status_code=404, detail="run not in history")
     return {"status": "deleted"}
+
+
+@router.delete("/api/history")
+def clear_history() -> dict[str, int]:
+    return {"deleted": _clear()}

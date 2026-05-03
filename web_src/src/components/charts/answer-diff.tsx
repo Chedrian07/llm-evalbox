@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import type { BenchmarkResult } from "@/lib/api";
 import type { HistoryEntry } from "@/lib/history";
 
 /**
@@ -18,16 +19,22 @@ export function AnswerDiff({ runs }: Props) {
   const [aId, setA] = useState<string>(runs[0]?.run_id ?? "");
   const [bId, setB] = useState<string>(runs[1]?.run_id ?? runs[0]?.run_id ?? "");
 
+  useEffect(() => {
+    if (runs.length < 2) return;
+    if (!runs.some((r) => r.run_id === aId)) setA(runs[0].run_id);
+    if (!runs.some((r) => r.run_id === bId) || bId === aId) setB(runs[1].run_id);
+  }, [aId, bId, runs]);
+
   const a = runs.find((r) => r.run_id === aId);
   const b = runs.find((r) => r.run_id === bId);
 
   const rows = useMemo(() => {
     if (!a || !b) return [];
-    const ba = new Map<string, any>(
-      (a.result?.benchmarks ?? []).map((x: any) => [x.name, x])
+    const ba = new Map<string, BenchmarkResult>(
+      (a.result?.benchmarks ?? []).map((x) => [x.name, x])
     );
-    const bb = new Map<string, any>(
-      (b.result?.benchmarks ?? []).map((x: any) => [x.name, x])
+    const bb = new Map<string, BenchmarkResult>(
+      (b.result?.benchmarks ?? []).map((x) => [x.name, x])
     );
     const names = Array.from(new Set([...ba.keys(), ...bb.keys()])).sort();
     return names.map((n) => {

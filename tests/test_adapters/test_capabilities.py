@@ -55,6 +55,8 @@ def test_user_drop_params_force_strip():
     # gpt-5.4-mini specific: maps the value back to reasoning_effort
     ("level \"minimal\" not supported, valid levels: low, medium, high, xhigh",
      {"reasoning_effort"}),
+    ("level \"none\" not supported, valid levels: low, medium, high, xhigh",
+     {"reasoning_effort"}),
     # multiple in one message
     ("unrecognized parameter: top_k. unknown key: stop", {"top_k", "stop"}),
     # nothing to extract

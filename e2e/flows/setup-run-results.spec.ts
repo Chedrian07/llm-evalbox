@@ -3,55 +3,172 @@ import { test, expect } from "@playwright/test";
 /**
  * Smoke flow: Setup → Running → Results.
  *
- * Uses the deterministic in-process mock backend that ships with the build:
- * we point the SPA at a fake endpoint and intercept /v1/chat/completions
- * via Playwright's request routing. The point of the test is wiring, not
- * any specific accuracy.
+ * The FastAPI server only serves the built SPA here. Browser-side /api/*
+ * calls are mocked so the flow is deterministic and never reaches a real
+ * model gateway.
  */
 test("setup → run → results renders the matrix", async ({ page }) => {
-  // Intercept the model's chat-completions route. We don't know the host the
-  // user types, so we match any *.test/v1/chat/completions URL.
-  await page.route(/\/v1\/chat\/completions$/, (route) => {
+  const result = {
+    schema_version: 1,
+    run_id: "evalbox-e2e",
+    started_at: "2026-05-03T00:00:00Z",
+    finished_at: "2026-05-03T00:00:01Z",
+    seed: 42,
+    provider: { adapter: "chat_completions", base_url: "https://fake.test/v1", model: "fake-model" },
+    sampling: { concurrency: 2 },
+    thinking: { mode: "off", used: false },
+    capability: {},
+    strict_deterministic: false,
+    strict_failures: false,
+    benchmarks: [{
+      name: "mmlu",
+      samples: 2,
+      accuracy: 0.5,
+      accuracy_ci95: [0.1, 0.9],
+      latency_ms: { p50: 100, p95: 120 },
+      tokens: { prompt: 20, completion: 2, reasoning: 0, cached_prompt: 0 },
+      cost_usd_estimated: 0.001,
+      thinking_used: false,
+      denominator_policy: "lenient",
+      cache_hits: 0,
+    }],
+    totals: {
+      accuracy_macro: 0.5,
+      tokens: { prompt: 20, completion: 2, reasoning: 0, cached_prompt: 0 },
+      cost_usd_estimated: 0.001,
+    },
+  };
+
+  await page.route("**/api/defaults", (route) => {
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        id: "x",
+        base_url: "https://fake.test/v1",
         model: "fake-model",
-        choices: [
-          {
-            index: 0,
-            finish_reason: "stop",
-            message: { role: "assistant", content: "B" },
-          },
-        ],
-        usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 },
+        adapter: "chat_completions",
+        profile: null,
+        thinking: null,
+        reasoning_effort: null,
+        concurrency: null,
+        rpm: null,
+        tpm: null,
+        max_cost_usd: null,
+        accept_code_exec: false,
+        no_cache: false,
+        strict_failures: false,
+        no_thinking_rerun: false,
+        prompt_cache_aware: false,
+        drop_params: null,
+        api_key_env: "OPENAI_API_KEY",
+        has_api_key: false,
+        detected_api_key_envs: [],
+        api_keys: {},
       }),
     });
   });
-  await page.route(/\/v1\/models$/, (route) => {
+  await page.route("**/api/benchmarks", (route) => {
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ data: [{ id: "fake-model", owned_by: "test" }] }),
+      body: JSON.stringify([
+        { name: "mmlu", quick_size: 200, is_code_bench: false, category: "knowledge", license: "MIT" },
+      ]),
+    });
+  });
+  await page.route("**/api/models", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ id: "fake-model", owned_by: "test", created: 0 }]),
+    });
+  });
+  await page.route("**/api/connection/test", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        adapter: "chat_completions",
+        model_listed: true,
+        model_count: 1,
+        latency_ms: 50,
+        finish_reason: "stop",
+        thinking_observed: false,
+        text_preview: "OK",
+        capability: {
+          accepts_temperature: true,
+          accepts_top_p: true,
+          accepts_top_k: false,
+          accepts_seed: true,
+          accepts_reasoning_effort: false,
+          use_max_completion_tokens: false,
+          notes: "",
+        },
+        learned_drop_params: [],
+        error: null,
+      }),
+    });
+  });
+  await page.route("**/api/pricing/estimate", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        est_prompt_tokens: 1600,
+        est_completion_tokens: 10,
+        est_reasoning_tokens: 0,
+        est_cost_usd: 0.01,
+        est_seconds: 2,
+      }),
+    });
+  });
+  await page.route("**/api/runs", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ run_id: "evalbox-e2e", status: "queued" }),
+    });
+  });
+  await page.route("**/api/runs/evalbox-e2e/events", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: [
+        "event: progress",
+        "data: {\"type\":\"progress\",\"phase\":\"eval\",\"bench\":\"mmlu\",\"current\":2,\"total\":2,\"running_accuracy\":0.5,\"thinking_used\":false}",
+        "",
+        "event: result",
+        "data: {\"type\":\"result\",\"bench\":\"mmlu\",\"data\":{\"name\":\"mmlu\",\"samples\":2,\"accuracy\":0.5,\"cost_usd\":0.001}}",
+        "",
+        "event: done",
+        "data: {\"type\":\"done\",\"summary\":{\"run_id\":\"evalbox-e2e\"}}",
+        "",
+        "",
+      ].join("\n"),
+    });
+  });
+  await page.route("**/api/runs/evalbox-e2e", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        run_id: "evalbox-e2e",
+        status: "completed",
+        started_at: result.started_at,
+        finished_at: result.finished_at,
+        result,
+      }),
     });
   });
 
   await page.goto("/");
-
-  // Setup: fill connection. The SPA's default base_url is OpenAI public — we
-  // overwrite to a fake host so our request routes match.
-  await page.getByPlaceholder("https://api.openai.com/v1").fill("https://fake.test/v1");
-  await page.getByPlaceholder("gpt-4o-mini").fill("fake-model");
+  await page.waitForTimeout(1000);
 
   // Test connection
   await page.getByRole("button", { name: /Test connection|연결 확인/ }).click();
   await expect(page.getByText(/Connected|연결됨/)).toBeVisible({ timeout: 15_000 });
-
-  // Pick a benchmark — mmlu is checked by default in our store.
-  // Force samples=2 so the run finishes quickly.
-  const samplesInput = page.locator('input[type="number"]').first();
-  await samplesInput.fill("2");
 
   // Run
   await page.getByRole("button", { name: /Run benchmarks|벤치마크 실행/ }).click();

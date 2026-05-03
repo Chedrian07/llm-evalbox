@@ -69,6 +69,18 @@ def test_apply_thinking_explicit_effort_preserved():
     assert re_eff == "minimal"
 
 
+def test_apply_thinking_explicit_none_effort_preserved():
+    """Gateway-specific reasoning_effort=none is forwarded unchanged."""
+    ct, re_eff, ex, warns = apply_thinking_to_request(
+        model="gpt-5.4-mini",
+        mode="off",
+        chat_template_kwargs={},
+        reasoning_effort="none",
+        extra={},
+    )
+    assert re_eff == "none"
+
+
 def test_apply_thinking_o_series_on_default_high():
     ct, re_eff, ex, warns = apply_thinking_to_request(
         model="o3-mini",

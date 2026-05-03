@@ -443,6 +443,7 @@ class BaseBenchmark(ABC):
                                 sem=sem,
                                 cache=cache,
                                 base_url=base_url,
+                                prompt_cache_aware=prompt_cache_aware,
                                 runtime_drops=runtime_drops,
                             )
                             for i in batch_indices

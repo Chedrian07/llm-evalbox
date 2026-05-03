@@ -162,11 +162,12 @@ _UNSUPPORTED_PARAM_PATTERNS: tuple[re.Pattern[str], ...] = (
     # gpt-5.4-mini / cliproxy: 'level "minimal" not supported'
     # → reasoning_effort capability mismatch. We map the value name back to the
     # parameter when the offending value is a known reasoning_effort level.
-    re.compile(rf"level\s+{_Q}(?P<val>minimal|low|medium|high|xhigh){_Q}\s+not\s+supported", re.I),
+    re.compile(rf"level\s+{_Q}(?P<val>none|minimal|low|medium|high|xhigh){_Q}\s+not\s+supported", re.I),
 )
 
 # Map values that show up in error messages back to the parameter name.
 _VALUE_TO_PARAM = {
+    "none": "reasoning_effort",
     "minimal": "reasoning_effort",
     "low": "reasoning_effort",
     "medium": "reasoning_effort",

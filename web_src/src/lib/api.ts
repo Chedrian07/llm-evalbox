@@ -58,10 +58,90 @@ export interface RunCreateRequest {
   concurrency?: number;
   thinking?: "auto" | "on" | "off";
   no_thinking_rerun?: boolean;
+  prompt_cache_aware?: boolean;
   accept_code_exec?: boolean;
   strict_failures?: boolean;
   no_cache?: boolean;
   max_cost_usd?: number | null;
+  sampling?: {
+    temperature?: number | null;
+    top_p?: number | null;
+    top_k?: number | null;
+    max_tokens?: number | null;
+    reasoning_effort?: string | null;
+  };
+  drop_params?: string[];
+}
+
+export interface BenchmarkResult {
+  name: string;
+  samples: number;
+  accuracy: number;
+  accuracy_ci95?: [number, number] | number[];
+  correct_count?: number;
+  category_scores?: Record<string, number>;
+  error_breakdown?: Record<string, number>;
+  latency_ms?: { p50?: number | null; p95?: number | null };
+  tokens?: {
+    prompt?: number;
+    completion?: number;
+    reasoning?: number;
+    cached_prompt?: number;
+    reasoning_estimated?: boolean;
+  };
+  cost_usd?: number | null;
+  cost_usd_estimated?: number | null;
+  duration_s?: number;
+  thinking_used?: boolean;
+  denominator_policy?: "lenient" | "strict" | string;
+  cache_hits?: number;
+  prompt_cache_hit_rate?: number;
+  learned_drop_params?: string[];
+}
+
+export interface RunResult {
+  schema_version: number;
+  run_id: string;
+  started_at: string;
+  finished_at: string;
+  seed: number;
+  provider?: { adapter?: string; base_url?: string; model?: string };
+  sampling?: Record<string, unknown>;
+  thinking?: { mode?: string; used?: boolean };
+  capability?: Record<string, unknown>;
+  strict_deterministic?: boolean;
+  strict_failures?: boolean;
+  benchmarks?: BenchmarkResult[];
+  totals?: {
+    accuracy_macro?: number;
+    tokens?: {
+      prompt?: number;
+      completion?: number;
+      reasoning?: number;
+      cached_prompt?: number;
+    };
+    cost_usd_estimated?: number | null;
+  };
+}
+
+export interface RunDetail {
+  run_id: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  result: RunResult | null;
+}
+
+export interface HistorySummary {
+  run_id: string;
+  started_at: string;
+  finished_at: string | null;
+  model: string | null;
+  base_url: string | null;
+  adapter: string | null;
+  accuracy_macro: number | null;
+  cost_usd: number | null;
+  bench_count: number;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -110,30 +190,52 @@ export const api = {
   defaults: () => request<ServerDefaults>("/api/defaults"),
   benchmarks: () => request<BenchmarkInfo[]>("/api/benchmarks"),
   listModels: (
-    args: { base_url: string; adapter?: string; api_key_env?: string },
+    args: { base_url: string; model?: string; adapter?: string; api_key?: string; api_key_env?: string },
     init?: RequestInit,
-  ) => {
-    const qs = new URLSearchParams({ base_url: args.base_url });
-    if (args.adapter) qs.set("adapter", args.adapter);
-    if (args.api_key_env) qs.set("api_key_env", args.api_key_env);
-    return request<ModelInfo[]>(`/api/models?${qs.toString()}`, init);
-  },
+  ) =>
+    request<ModelInfo[]>("/api/models", {
+      method: "POST",
+      body: JSON.stringify({
+        base_url: args.base_url,
+        model: args.model || "",
+        adapter: args.adapter,
+        api_key: args.api_key || undefined,
+        api_key_env: args.api_key ? undefined : args.api_key_env,
+      }),
+      ...init,
+    }),
   testConnection: (req: ConnectionRequest) =>
     request<ConnectionResponse>("/api/connection/test", {
       method: "POST",
       body: JSON.stringify(req),
     }),
-  estimateCost: (model: string, benchmarks: string[], samples: number, thinking: "auto" | "on" | "off") =>
+  estimateCost: (
+    model: string,
+    benchmarks: string[],
+    samples: number,
+    concurrency: number,
+    thinking: "auto" | "on" | "off",
+  ) =>
     request<PricingEstimate>("/api/pricing/estimate", {
       method: "POST",
-      body: JSON.stringify({ model, benchmarks, samples, thinking }),
+      body: JSON.stringify({ model, benchmarks, samples, concurrency, thinking }),
     }),
   startRun: (req: RunCreateRequest) =>
     request<{ run_id: string; status: string }>("/api/runs", {
       method: "POST",
       body: JSON.stringify(req),
     }),
-  getRun: (id: string) => request<any>(`/api/runs/${id}`),
+  getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),
   cancelRun: (id: string) =>
     request<{ status: string }>(`/api/runs/${id}`, { method: "DELETE" }),
+  history: (limit = 100) => request<HistorySummary[]>(`/api/history?limit=${limit}`),
+  getHistory: (id: string) => request<RunResult>(`/api/history/${encodeURIComponent(id)}`),
+  deleteHistory: (id: string) =>
+    request<{ status: string }>(`/api/history/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  clearHistory: () => request<{ deleted: number }>("/api/history", { method: "DELETE" }),
+  shareRun: (runId: string) =>
+    request<{ hash: string; url: string }>("/api/shares", {
+      method: "POST",
+      body: JSON.stringify({ run_id: runId }),
+    }),
 };

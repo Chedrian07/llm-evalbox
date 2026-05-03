@@ -51,6 +51,8 @@ interface Props {
   runs: HistoryEntry[];
 }
 
+type RadarRow = { category: string } & Record<string, string | number>;
+
 export function RadarChartComparison({ runs }: Props) {
   if (runs.length === 0) {
     return <p className="text-sm text-muted-foreground">No runs in history yet.</p>;
@@ -69,8 +71,8 @@ export function RadarChartComparison({ runs }: Props) {
     }
   }
 
-  const data = Object.entries(cats).map(([cat, byModel]) => {
-    const row: Record<string, any> = { category: cat };
+  const data: RadarRow[] = Object.entries(cats).map(([cat, byModel]) => {
+    const row: RadarRow = { category: cat };
     for (const [model, agg] of Object.entries(byModel)) {
       row[model] = agg.n > 0 ? agg.sum / agg.n : 0;
     }

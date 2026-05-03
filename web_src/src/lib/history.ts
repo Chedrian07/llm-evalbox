@@ -2,6 +2,8 @@
 // Tiny IndexedDB helper for persisting completed run results in the browser.
 // We don't pull in idb-keyval — a few raw IDBOpenDBRequest calls are enough.
 
+import { api, type RunResult } from "./api";
+
 const DB_NAME = "evalbox";
 const DB_VERSION = 1;
 const STORE = "runs";
@@ -11,7 +13,8 @@ export interface HistoryEntry {
   saved_at: number;
   model: string;
   base_url: string;
-  result: any; // result.json payload
+  source?: "server" | "local";
+  result: RunResult;
 }
 
 function open(): Promise<IDBDatabase> {
@@ -73,4 +76,53 @@ export async function clearHistory(): Promise<void> {
     tx.objectStore(STORE).clear();
   });
   db.close();
+}
+
+export async function listServerHistory(limit = 100): Promise<HistoryEntry[]> {
+  const rows = await api.history(limit);
+  const details = await Promise.allSettled(rows.map((row) => api.getHistory(row.run_id)));
+  return details.flatMap((res, index) => {
+    if (res.status !== "fulfilled") return [];
+    const result = res.value;
+    const row = rows[index];
+    return [{
+      run_id: result.run_id,
+      saved_at: Date.parse(result.finished_at || result.started_at || row.started_at) || Date.now(),
+      model: result.provider?.model || row.model || "?",
+      base_url: result.provider?.base_url || row.base_url || "",
+      source: "server" as const,
+      result,
+    }];
+  });
+}
+
+export async function listMergedHistory(limit = 100): Promise<HistoryEntry[]> {
+  const [server, local] = await Promise.all([
+    listServerHistory(limit).catch(() => []),
+    listHistory().catch(() => []),
+  ]);
+  const byId = new Map<string, HistoryEntry>();
+  for (const entry of local) {
+    byId.set(entry.run_id, { ...entry, source: entry.source ?? "local" });
+  }
+  for (const entry of server) {
+    byId.set(entry.run_id, entry);
+  }
+  return Array.from(byId.values())
+    .sort((a, b) => b.saved_at - a.saved_at)
+    .slice(0, limit);
+}
+
+export async function deleteMergedHistory(run_id: string): Promise<void> {
+  await Promise.allSettled([
+    api.deleteHistory(run_id),
+    deleteHistory(run_id),
+  ]);
+}
+
+export async function clearMergedHistory(): Promise<void> {
+  await Promise.allSettled([
+    api.clearHistory(),
+    clearHistory(),
+  ]);
 }

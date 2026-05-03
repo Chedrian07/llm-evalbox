@@ -7,7 +7,7 @@ import { fmtCost, fmtNum } from "@/lib/format";
 
 export function CostPreview() {
   const { t } = useTranslation();
-  const { model, selectedBenches, samples, thinking } = useApp();
+  const { model, selectedBenches, samples, concurrency, thinking } = useApp();
   const [est, setEst] = useState<PricingEstimate | null>(null);
 
   useEffect(() => {
@@ -17,7 +17,7 @@ export function CostPreview() {
       return;
     }
     api
-      .estimateCost(model, [...selectedBenches], samples, thinking)
+      .estimateCost(model, [...selectedBenches], samples, concurrency, thinking)
       .then((r) => {
         if (!cancelled) setEst(r);
       })
@@ -27,7 +27,7 @@ export function CostPreview() {
     return () => {
       cancelled = true;
     };
-  }, [model, selectedBenches, samples, thinking]);
+  }, [model, selectedBenches, samples, concurrency, thinking]);
 
   return (
     <Card>

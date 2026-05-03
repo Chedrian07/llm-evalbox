@@ -112,7 +112,7 @@ def _run(script: str, *, policy: SandboxPolicy, stdin: str | None = None) -> San
             return SandboxResult(
                 passed=False,
                 error_kind="timeout",
-                stdout=(e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, (bytes, bytearray)) else (e.stdout or ""))[:2000],
+                stdout=(e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes | bytearray) else (e.stdout or ""))[:2000],
                 stderr="timeout",
                 returncode=-1,
                 elapsed_s=elapsed,

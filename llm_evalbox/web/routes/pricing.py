@@ -53,8 +53,8 @@ def estimate(req: PricingEstimateRequest) -> PricingEstimateResponse:
         # placeholder. The real run captures the right number.
         if req.thinking != "off":
             total_reasoning += ac * n * 4
-        # ~5s per question at concurrency=8 ≈ n / 8 * 5
-        total_seconds += int(n / 8 * 5)
+        # ~5s per question, scaled by the planned concurrency.
+        total_seconds += int(n / max(1, req.concurrency) * 5)
 
     usage = Usage(
         prompt_tokens=total_prompt,

@@ -25,7 +25,7 @@ export default defineConfig({
     // Skipped in CI when EVALBOX_E2E_NO_SERVER=1 (pre-started elsewhere).
     command: process.env.EVALBOX_E2E_NO_SERVER
       ? "echo 'EVALBOX_E2E_NO_SERVER=1, expecting external server'"
-      : `evalbox web --host 127.0.0.1 --port ${PORT} --no-open`,
+      : `python -m llm_evalbox web --host 127.0.0.1 --port ${PORT} --no-open`,
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from llm_evalbox.cache import upsert_run
 from llm_evalbox.web.server import build_app
 from llm_evalbox.web.state import get_registry
 
@@ -56,6 +57,26 @@ def test_share_unknown_run(client):
 def test_share_unknown_hash(client):
     r = client.get("/api/shares/0123456789ab")
     assert r.status_code == 404
+
+
+def test_share_create_from_persistent_history(client):
+    upsert_run({
+        "schema_version": 1,
+        "run_id": "evalbox-history",
+        "started_at": "2026-05-03T00:00:00Z",
+        "finished_at": "2026-05-03T00:00:01Z",
+        "provider": {"adapter": "chat_completions",
+                     "base_url": "https://internal-history.example.com/v1",
+                     "model": "fake-model"},
+        "benchmarks": [{"name": "mmlu", "accuracy": 0.5}],
+        "totals": {"accuracy_macro": 0.5},
+    })
+
+    r = client.post("/api/shares", json={"run_id": "evalbox-history"})
+    assert r.status_code == 200
+    payload = client.get(r.json()["url"]).json()
+    assert payload["run_id"] == "evalbox-history"
+    assert payload["provider"]["base_url"] == "https://internal-history.example.com"
 
 
 def test_share_idempotent_on_same_payload(client):

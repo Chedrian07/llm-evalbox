@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from llm_evalbox.core.messages import Message
 
-ReasoningEffort = Literal["minimal", "low", "medium", "high"]
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
 ThinkingLiteral = Literal["auto", "on", "off"]
 
 

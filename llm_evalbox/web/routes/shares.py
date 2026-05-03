@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from llm_evalbox.cache import get_run as get_history_run
 from llm_evalbox.cache.store import cache_root
 from llm_evalbox.web.state import get_registry
 
@@ -55,10 +56,13 @@ def create_share(body: dict[str, Any]) -> dict[str, str]:
     if not run_id:
         raise HTTPException(status_code=400, detail="run_id required")
     state = get_registry().get(run_id)
-    if state is None or state.final_payload is None:
-        raise HTTPException(status_code=404, detail="run not finished or not found")
-
-    payload = _scrub(state.final_payload)
+    if state is not None and state.final_payload is not None:
+        payload = _scrub(state.final_payload)
+    else:
+        history_payload = get_history_run(run_id)
+        if history_payload is None:
+            raise HTTPException(status_code=404, detail="run not finished or not found")
+        payload = _scrub(history_payload)
     canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
     h = hashlib.sha256(canonical).hexdigest()[:12]
 

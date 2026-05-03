@@ -111,7 +111,8 @@ def apply_thinking_to_request(
         # On → "high"; off → "low". OpenAI public o-series accepts "minimal"
         # but several gpt-5 variants (e.g. gpt-5.4-mini via cliproxy) reject it
         # and require one of {low, medium, high, xhigh}. "low" is the safe
-        # cross-vendor floor.
+        # cross-vendor floor. Preserve explicit user choices, including
+        # gateway-specific "none" where supported.
         if re_eff is None:
             re_eff = "high" if enabled else "low"
     elif fam.encoder == "openrouter_extra":
