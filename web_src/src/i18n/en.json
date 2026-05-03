@@ -1,0 +1,112 @@
+{
+  "app": {
+    "title": "llm-evalbox",
+    "subtitle": "Run academic benchmarks against any OpenAI-compatible endpoint."
+  },
+  "header": {
+    "locale": "Language",
+    "theme": "Theme"
+  },
+  "stage": {
+    "setup": "Setup",
+    "running": "Running",
+    "results": "Results"
+  },
+  "connection": {
+    "title": "Connection",
+    "base_url": "Base URL",
+    "base_url_placeholder": "https://api.openai.com/v1",
+    "model": "Model",
+    "model_placeholder": "gpt-4o-mini",
+    "adapter": "Adapter",
+    "adapter_auto": "auto (chat_completions)",
+    "adapter_chat": "chat_completions",
+    "adapter_responses": "responses (OpenAI o-series / gpt-5)",
+    "api_key": "API key",
+    "api_key_placeholder": "sk-... (kept in memory only, never echoed)",
+    "test": "Test connection",
+    "testing": "Testing…",
+    "ok": "Connected",
+    "failed": "Connection failed",
+    "model_listed": "Model listed in /v1/models",
+    "model_count": "{{count}} models exposed",
+    "latency": "Dry call: {{ms}}ms",
+    "thinking_observed": "Thinking observed in dry call",
+    "learned_drop_params": "doctor learned drop_params: {{params}}"
+  },
+  "capability": {
+    "title": "Capability",
+    "temperature": "temperature",
+    "top_p": "top_p",
+    "top_k": "top_k",
+    "seed": "seed",
+    "reasoning_effort": "reasoning_effort",
+    "max_completion_tokens": "max_completion_tokens"
+  },
+  "thinking": {
+    "title": "Thinking",
+    "auto": "auto",
+    "on": "on",
+    "off": "off",
+    "auto_desc": "Detect on first batch; switch to on if observed.",
+    "on_desc": "Force thinking on (max_tokens clamped to 8K–32K).",
+    "off_desc": "Force thinking off (where supported)."
+  },
+  "benches": {
+    "title": "Benchmarks",
+    "knowledge": "Knowledge",
+    "reasoning": "Reasoning",
+    "math": "Math",
+    "coding": "Coding",
+    "truthful": "Truthfulness",
+    "multilingual": "Multilingual",
+    "safety": "Safety / Fairness",
+    "other": "Other",
+    "code_warning": "This benchmark runs model-generated code locally. Toggle below to opt in.",
+    "samples": "Samples per benchmark",
+    "samples_help": "0 = full set"
+  },
+  "options": {
+    "title": "Options",
+    "concurrency": "Concurrency",
+    "accept_code_exec": "Allow local code execution (HumanEval / MBPP / LiveCodeBench)",
+    "strict_failures": "Strict denominator (count sandbox/network errors as wrong)",
+    "max_cost_usd": "Max cost (USD)"
+  },
+  "cost": {
+    "title": "Estimated cost",
+    "tokens": "≈ {{tokens}} tokens",
+    "seconds": "≈ {{seconds}}s",
+    "unknown": "No catalog price for this model. Pass --price-* in the CLI."
+  },
+  "run": {
+    "start": "Run benchmarks",
+    "no_benches": "Select at least one benchmark",
+    "code_consent_required": "Accept local code execution to include code benchmarks",
+    "cancel": "Cancel run",
+    "running_accuracy": "Running accuracy",
+    "thinking_on": "thinking on"
+  },
+  "results": {
+    "title": "Results",
+    "matrix": "Matrix",
+    "raw": "Raw JSON",
+    "new_run": "New run",
+    "totals": "totals",
+    "samples": "samples",
+    "accuracy": "accuracy",
+    "ci95": "CI95",
+    "p50": "p50",
+    "p95": "p95",
+    "prompt": "prompt",
+    "completion": "compl.",
+    "reasoning": "reasoning",
+    "cost": "cost",
+    "category": "category",
+    "errors": "errors"
+  },
+  "error": {
+    "title": "Error",
+    "retry": "Retry"
+  }
+}

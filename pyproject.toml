@@ -68,6 +68,8 @@ packages = ["llm_evalbox"]
 "llm_evalbox/data/manifest.yaml" = "llm_evalbox/data/manifest.yaml"
 "llm_evalbox/data/datasets" = "llm_evalbox/data/datasets"
 "llm_evalbox/pricing/catalog.yaml" = "llm_evalbox/pricing/catalog.yaml"
+# Frontend bundle (built by scripts/build_frontend.py). Not version-controlled.
+"llm_evalbox/web/frontend" = "llm_evalbox/web/frontend"
 
 [tool.hatch.build.targets.sdist]
 include = [

@@ -1,0 +1,112 @@
+{
+  "app": {
+    "title": "llm-evalbox",
+    "subtitle": "OpenAI 호환 엔드포인트에 학술 벤치마크를 한 번에 돌리는 경량 도구."
+  },
+  "header": {
+    "locale": "언어",
+    "theme": "테마"
+  },
+  "stage": {
+    "setup": "설정",
+    "running": "실행 중",
+    "results": "결과"
+  },
+  "connection": {
+    "title": "연결",
+    "base_url": "Base URL",
+    "base_url_placeholder": "https://api.openai.com/v1",
+    "model": "모델",
+    "model_placeholder": "gpt-4o-mini",
+    "adapter": "어댑터",
+    "adapter_auto": "auto (chat_completions)",
+    "adapter_chat": "chat_completions",
+    "adapter_responses": "responses (OpenAI o-series / gpt-5)",
+    "api_key": "API 키",
+    "api_key_placeholder": "sk-… (메모리에만 저장, 응답에 echo 안 함)",
+    "test": "연결 확인",
+    "testing": "확인 중…",
+    "ok": "연결됨",
+    "failed": "연결 실패",
+    "model_listed": "/v1/models 에 모델 존재",
+    "model_count": "{{count}}개 모델 노출",
+    "latency": "Dry call: {{ms}}ms",
+    "thinking_observed": "Dry call 에서 thinking 감지됨",
+    "learned_drop_params": "doctor 학습 drop_params: {{params}}"
+  },
+  "capability": {
+    "title": "Capability",
+    "temperature": "temperature",
+    "top_p": "top_p",
+    "top_k": "top_k",
+    "seed": "seed",
+    "reasoning_effort": "reasoning_effort",
+    "max_completion_tokens": "max_completion_tokens"
+  },
+  "thinking": {
+    "title": "Thinking",
+    "auto": "auto",
+    "on": "on",
+    "off": "off",
+    "auto_desc": "첫 배치에서 감지되면 on 으로 자동 전환.",
+    "on_desc": "강제 on (max_tokens 8K–32K 로 클램프).",
+    "off_desc": "지원되는 모델에서 강제 off."
+  },
+  "benches": {
+    "title": "벤치마크",
+    "knowledge": "지식",
+    "reasoning": "추론",
+    "math": "수학",
+    "coding": "코딩",
+    "truthful": "진실성",
+    "multilingual": "다국어",
+    "safety": "안전 / 공정성",
+    "other": "기타",
+    "code_warning": "이 벤치마크는 모델이 생성한 코드를 로컬에서 실행합니다. 아래 옵션으로 동의 후 사용.",
+    "samples": "벤치마크당 샘플 수",
+    "samples_help": "0 = 전량"
+  },
+  "options": {
+    "title": "옵션",
+    "concurrency": "동시성",
+    "accept_code_exec": "로컬 코드 실행 허용 (HumanEval / MBPP / LiveCodeBench)",
+    "strict_failures": "엄격 분모 (sandbox / network 실패도 분모 포함)",
+    "max_cost_usd": "최대 비용 (USD)"
+  },
+  "cost": {
+    "title": "예상 비용",
+    "tokens": "≈ {{tokens}} 토큰",
+    "seconds": "≈ {{seconds}}초",
+    "unknown": "이 모델은 카탈로그에 단가 없음. CLI 의 --price-* 사용."
+  },
+  "run": {
+    "start": "벤치마크 실행",
+    "no_benches": "벤치마크를 1개 이상 선택하세요",
+    "code_consent_required": "코드 벤치 포함하려면 로컬 코드 실행을 허용하세요",
+    "cancel": "실행 취소",
+    "running_accuracy": "현재 정확도",
+    "thinking_on": "thinking on"
+  },
+  "results": {
+    "title": "결과",
+    "matrix": "매트릭스",
+    "raw": "원본 JSON",
+    "new_run": "새 실행",
+    "totals": "합계",
+    "samples": "샘플",
+    "accuracy": "정확도",
+    "ci95": "CI95",
+    "p50": "p50",
+    "p95": "p95",
+    "prompt": "프롬프트",
+    "completion": "완성",
+    "reasoning": "추론",
+    "cost": "비용",
+    "category": "카테고리",
+    "errors": "에러"
+  },
+  "error": {
+    "title": "오류",
+    "retry": "재시도"
+  }
+}
