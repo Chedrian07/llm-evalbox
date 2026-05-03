@@ -2,7 +2,8 @@
 // Global app state: connection config, selected benches, run lifecycle.
 
 import { create } from "zustand";
-import type { CapabilityInfo, ConnectionResponse, ServerDefaults } from "./api";
+import { api } from "./api";
+import type { CapabilityInfo, ConnectionResponse, ModelInfo, ServerDefaults } from "./api";
 
 export type Stage = "setup" | "running" | "results";
 
@@ -38,6 +39,17 @@ interface AppState {
   setConnection: (patch: Partial<Pick<AppState, "baseUrl" | "model" | "adapter" | "apiKey" | "apiKeyEnv">>) => void;
   setConnResponse: (resp: ConnectionResponse) => void;
   hydrateFromServer: (d: ServerDefaults) => void;
+
+  // Model discovery (proxy to GET /v1/models on the configured endpoint)
+  availableModels: ModelInfo[];
+  modelsLoading: boolean;
+  /** Last error from /api/models — most gateways without /v1/models surface
+      a 502 here; we keep the input free-typing so users can still set a model. */
+  modelsError: string | null;
+  /** Tuple of inputs the last successful list was fetched for — lets us skip
+      redundant fetches when the user types but hasn't changed the connection. */
+  modelsKey: string | null;
+  loadModels: (opts?: { force?: boolean }) => Promise<void>;
 
   // Setup
   selectedBenches: Set<string>;
@@ -75,6 +87,11 @@ interface AppState {
   setFinalResult: (r: any | null) => void;
 }
 
+// Module-level token so concurrent loadModels() calls cancel earlier in-flights.
+// (AbortController would also work; this is simpler since fetch() in api.ts
+// doesn't take a signal yet and we only need "ignore stale results".)
+let _modelsLoadToken = 0;
+
 const detectDefaultBaseUrl = (): string => {
   // Try to read EVALBOX_BASE_URL via a meta tag if the host injected one.
   if (typeof document !== "undefined") {
@@ -84,7 +101,7 @@ const detectDefaultBaseUrl = (): string => {
   return "https://api.openai.com/v1";
 };
 
-export const useApp = create<AppState>((set) => ({
+export const useApp = create<AppState>((set, get) => ({
   baseUrl: detectDefaultBaseUrl(),
   model: "gpt-4o-mini",
   adapter: "auto",
@@ -95,6 +112,39 @@ export const useApp = create<AppState>((set) => ({
   hasServerApiKey: false,
   serverApiKeys: {},
   hydrated: false,
+  availableModels: [],
+  modelsLoading: false,
+  modelsError: null,
+  modelsKey: null,
+  loadModels: async (opts) => {
+    const s = get();
+    const baseUrl = s.baseUrl.trim();
+    if (!baseUrl) {
+      set({ availableModels: [], modelsError: null, modelsKey: null });
+      return;
+    }
+    const key = `${baseUrl}|${s.adapter}|${s.apiKeyEnv}`;
+    if (!opts?.force && key === s.modelsKey && s.availableModels.length > 0) return;
+    const token = ++_modelsLoadToken;
+    set({ modelsLoading: true, modelsError: null });
+    try {
+      const list = await api.listModels({
+        base_url: baseUrl,
+        adapter: s.adapter,
+        api_key_env: s.apiKeyEnv,
+      });
+      if (token !== _modelsLoadToken) return; // stale
+      set({ availableModels: list, modelsLoading: false, modelsKey: key });
+    } catch (e: any) {
+      if (token !== _modelsLoadToken) return;
+      set({
+        availableModels: [],
+        modelsLoading: false,
+        modelsError: e?.message?.slice(0, 200) || "list_models failed",
+        modelsKey: null,
+      });
+    }
+  },
   setConnection: (patch) =>
     set((prev) => {
       const next: Partial<AppState> = { ...patch };

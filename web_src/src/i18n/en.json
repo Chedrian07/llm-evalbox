@@ -32,7 +32,11 @@
     "model_count": "{{count}} models exposed",
     "latency": "Dry call: {{ms}}ms",
     "thinking_observed": "Thinking observed in dry call",
-    "learned_drop_params": "doctor learned drop_params: {{params}}"
+    "learned_drop_params": "doctor learned drop_params: {{params}}",
+    "models_loading": "Loading models…",
+    "models_count": "{{count}} models",
+    "models_refresh": "Refresh",
+    "models_error": "This gateway doesn't expose /v1/models — type the model name"
   },
   "capability": {
     "title": "Capability",

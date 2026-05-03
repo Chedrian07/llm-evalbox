@@ -99,10 +99,25 @@ export interface ServerDefaults {
   api_keys: Record<string, boolean>;
 }
 
+export interface ModelInfo {
+  id: string;
+  owned_by: string | null;
+  created: number | null;
+}
+
 export const api = {
   health: () => request<{ status: string; version: string }>("/api/health"),
   defaults: () => request<ServerDefaults>("/api/defaults"),
   benchmarks: () => request<BenchmarkInfo[]>("/api/benchmarks"),
+  listModels: (
+    args: { base_url: string; adapter?: string; api_key_env?: string },
+    init?: RequestInit,
+  ) => {
+    const qs = new URLSearchParams({ base_url: args.base_url });
+    if (args.adapter) qs.set("adapter", args.adapter);
+    if (args.api_key_env) qs.set("api_key_env", args.api_key_env);
+    return request<ModelInfo[]>(`/api/models?${qs.toString()}`, init);
+  },
   testConnection: (req: ConnectionRequest) =>
     request<ConnectionResponse>("/api/connection/test", {
       method: "POST",

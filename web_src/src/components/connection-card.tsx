@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,22 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
   const s = useApp();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Auto-fetch the model list whenever connection inputs settle (debounced).
+  // This gives users a native datalist autocomplete instead of having to type
+  // the full model name. Gateways that don't expose /v1/models surface an
+  // error and we keep the input free-typing.
+  useEffect(() => {
+    if (!s.hydrated) return;
+    if (compact) return;
+    const baseUrl = s.baseUrl.trim();
+    if (!baseUrl) return;
+    const handle = setTimeout(() => {
+      void s.loadModels();
+    }, 350);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.hydrated, s.baseUrl, s.adapter, s.apiKeyEnv, compact]);
 
   async function test() {
     setBusy(true);
@@ -65,12 +81,32 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
             />
           </div>
           <div className="space-y-1">
-            <Label>{t("connection.model")}</Label>
+            <Label className="flex items-center justify-between">
+              <span>{t("connection.model")}</span>
+              <ModelStatusPill />
+            </Label>
             <Input
               value={s.model}
               placeholder={t("connection.model_placeholder")!}
+              list="evalbox-model-options"
+              autoComplete="off"
+              spellCheck={false}
               onChange={(e) => s.setConnection({ model: e.target.value })}
+              onFocus={() => {
+                // Refresh on focus if we never loaded — covers the case where
+                // hydration finished after the initial debounce window.
+                if (s.availableModels.length === 0 && !s.modelsLoading) {
+                  void s.loadModels();
+                }
+              }}
             />
+            <datalist id="evalbox-model-options">
+              {s.availableModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.owned_by ? `${m.owned_by}` : ""}
+                </option>
+              ))}
+            </datalist>
           </div>
           <div className="space-y-1">
             <Label>{t("connection.adapter")}</Label>
@@ -161,6 +197,50 @@ function CapabilityBadge({ ok, label }: { ok: boolean; label: string }) {
       {ok ? "✓" : "✗"} {label}
     </Badge>
   );
+}
+
+function ModelStatusPill() {
+  const { t } = useTranslation();
+  const loading = useApp((s) => s.modelsLoading);
+  const error = useApp((s) => s.modelsError);
+  const count = useApp((s) => s.availableModels.length);
+  const loadModels = useApp((s) => s.loadModels);
+
+  if (loading) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[0.7rem] font-normal text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        {t("connection.models_loading")}
+      </span>
+    );
+  }
+  if (error) {
+    return (
+      <span
+        className="text-[0.7rem] font-normal text-amber-500"
+        title={error}
+      >
+        {t("connection.models_error")}
+      </span>
+    );
+  }
+  if (count > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[0.7rem] font-normal text-muted-foreground">
+        {t("connection.models_count", { count })}
+        <button
+          type="button"
+          onClick={() => void loadModels({ force: true })}
+          className="inline-flex items-center text-muted-foreground/70 transition hover:text-foreground"
+          title={t("connection.models_refresh")!}
+          aria-label={t("connection.models_refresh")!}
+        >
+          <RefreshCw className="h-3 w-3" />
+        </button>
+      </span>
+    );
+  }
+  return null;
 }
 
 function hostOnly(url: string): string {
