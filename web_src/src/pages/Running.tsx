@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
@@ -23,8 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConnectionCard } from "@/components/connection-card";
 import { Progress } from "@/components/ui/progress";
-import { RunMessages } from "@/components/run-messages";
-import { api, type RunMessage } from "@/lib/api";
+import { LiveLogPanel, type LogEntry } from "@/components/live-log-panel";
+import { api } from "@/lib/api";
 import { subscribeRun } from "@/lib/sse";
 import { useApp } from "@/lib/store";
 import { fmtAccLive, fmtCap, fmtCost, fmtElapsed } from "@/lib/format";
@@ -40,9 +40,17 @@ export function RunningPage() {
   const s = useApp();
   const [series, setSeries] = useState<AccumPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<RunMessage[]>([]);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [now, setNow] = useState(Date.now());
   const [startedAt] = useState(Date.now());
+  const logIdRef = useRef(0);
+
+  function appendLog(partial: Omit<LogEntry, "id" | "ts">, ts?: number) {
+    setLogEntries((prev) => [
+      ...prev,
+      { id: ++logIdRef.current, ts: ts ?? Date.now(), ...partial },
+    ].slice(-3000));
+  }
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -52,7 +60,34 @@ export function RunningPage() {
   useEffect(() => {
     if (!s.runId) return;
     const unsub = subscribeRun(s.runId, {
-      onAny: (_type, data) => pushMessage(setMessages, data),
+      onAny: (type, data) => {
+        // Generic system / status / error / done lines all go through here.
+        // The per-type handlers below add richer entries for "item" and
+        // similarly skip system entries we already covered.
+        if (type === "ping" || type === "item" || type === "progress") return;
+        if (type === "result") return; // handled below with bench name
+        if (type === "done") {
+          appendLog({
+            kind: "done",
+            text: data?.message ?? "run completed",
+          });
+          return;
+        }
+        if (type === "error") {
+          appendLog({
+            kind: "error",
+            text: data?.message ?? "stream error",
+          });
+          return;
+        }
+        appendLog({
+          kind: "system",
+          text:
+            typeof data?.message === "string"
+              ? data.message
+              : `${type}: ${JSON.stringify(data ?? {}).slice(0, 200)}`,
+        });
+      },
       onProgress: (data) => {
         s.updateBenchProgress(data.bench, {
           current: data.current,
@@ -67,9 +102,47 @@ export function RunningPage() {
           if (totalDone > 0) return [...prev, { done: totalDone, acc }].slice(-200);
           return prev;
         });
+        // Progress lines flood the log; we still surface them but the panel
+        // can hide them via its toolbar toggle.
+        if (data?.phase === "loading") {
+          appendLog({
+            kind: "system",
+            bench: data.bench,
+            text: "loading dataset",
+          });
+        }
+      },
+      onItem: (data) => {
+        appendLog({
+          kind: "item",
+          bench: data.bench,
+          index: data.index,
+          total: data.total,
+          correct: !!data.correct,
+          errorKind: data.error_kind,
+          expected: data.expected,
+          predicted: data.predicted,
+          promptPreview: data.prompt_preview,
+          textPreview: data.text_preview,
+          reasoningPreview: data.reasoning_preview,
+          latencyMs: data.latency_ms,
+          cacheHit: !!data.cache_hit,
+          tokens: data.tokens,
+          text: "",
+        });
       },
       onResult: (data) => {
         s.updateBenchProgress(data.bench, { done: true, result: data.data });
+        const acc = data?.data?.accuracy;
+        const cost = data?.data?.cost_usd;
+        const parts = [`completed`];
+        if (typeof acc === "number") parts.push(`acc=${acc.toFixed(3)}`);
+        if (typeof cost === "number") parts.push(`cost=$${cost.toFixed(4)}`);
+        appendLog({
+          kind: "result",
+          bench: data.bench,
+          text: parts.join(" · "),
+        });
       },
       onDone: async () => {
         try {
@@ -85,13 +158,8 @@ export function RunningPage() {
         }
       },
       onError: (data) => {
-        if (!data?.type) {
-          pushMessage(setMessages, {
-            type: "error",
-            message: data.message ?? "stream error",
-          });
-        }
-        setError(data.message ?? "stream error");
+        appendLog({ kind: "error", text: data?.message ?? "stream error" });
+        setError(data?.message ?? "stream error");
       },
     });
     return unsub;
@@ -290,15 +358,8 @@ export function RunningPage() {
           )}
         </div>
 
-        <aside className="xl:sticky xl:top-20 xl:self-start">
-          <section className="rounded-lg border border-border/60 surface-1">
-            <header className="border-b border-border/60 px-4 py-3">
-              <h3 className="text-sm font-semibold">{t("run.messages")}</h3>
-            </header>
-            <div className="max-h-[70vh] overflow-y-auto p-3">
-              <RunMessages messages={messages} empty="—" />
-            </div>
-          </section>
+        <aside className="xl:sticky xl:top-20 xl:self-start xl:h-[calc(100vh-6rem)]">
+          <LiveLogPanel entries={logEntries} onClear={() => setLogEntries([])} />
         </aside>
       </div>
     </div>
@@ -394,36 +455,3 @@ function BenchProgressCard({
   );
 }
 
-function pushMessage(setMessages: Dispatch<SetStateAction<RunMessage[]>>, event: any) {
-  const message = runMessageFromEvent(event);
-  if (!message) return;
-  setMessages((prev) => [...prev, message].slice(-80));
-}
-
-function runMessageFromEvent(event: any): RunMessage | null {
-  if (!event || event.type === "ping") return null;
-  const type = String(event.type ?? "message");
-  const created_at = event.created_at ?? new Date().toISOString();
-  const content =
-    typeof event.message === "string" ? event.message : fallbackMessageContent(event);
-  const metadata = Object.fromEntries(
-    Object.entries(event).filter(([key]) => key !== "message" && key !== "created_at"),
-  );
-  return {
-    role: type === "result" || type === "done" ? "assistant" : "system",
-    content,
-    created_at,
-    metadata,
-  };
-}
-
-function fallbackMessageContent(event: any): string {
-  if (event.type === "progress") {
-    if (event.phase === "loading") return `${event.bench}: loading dataset`;
-    return `${event.bench}: ${event.current ?? 0}/${event.total ?? "?"}`;
-  }
-  if (event.type === "result") return `${event.bench}: completed`;
-  if (event.type === "done") return "run completed";
-  if (event.type === "error") return event.message ?? "run error";
-  return String(event.type ?? "message");
-}

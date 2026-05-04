@@ -2,10 +2,19 @@
 // Lightweight EventSource wrapper. The SSE event names match the backend:
 // "status" | "progress" | "result" | "done" | "error" | "ping".
 
-export type SSEEventType = "status" | "progress" | "result" | "done" | "error" | "ping" | "message";
+export type SSEEventType =
+  | "status"
+  | "progress"
+  | "item"
+  | "result"
+  | "done"
+  | "error"
+  | "ping"
+  | "message";
 
 export interface SSEHandlers {
   onProgress?: (data: any) => void;
+  onItem?: (data: any) => void;
   onResult?: (data: any) => void;
   onDone?: (data: any) => void;
   onError?: (data: any) => void;
@@ -25,6 +34,7 @@ export function subscribeRun(runId: string, handlers: SSEHandlers): () => void {
     }
     handlers.onAny?.(type, data);
     if (type === "progress") handlers.onProgress?.(data);
+    else if (type === "item") handlers.onItem?.(data);
     else if (type === "result") handlers.onResult?.(data);
     else if (type === "done") {
       handlers.onDone?.(data);
@@ -34,7 +44,7 @@ export function subscribeRun(runId: string, handlers: SSEHandlers): () => void {
     }
   };
 
-  for (const t of ["status", "progress", "result", "done", "error", "ping"] as const) {
+  for (const t of ["status", "progress", "item", "result", "done", "error", "ping"] as const) {
     es.addEventListener(t, (ev) => dispatch(ev as MessageEvent, t));
   }
   es.onerror = () => {

@@ -343,6 +343,7 @@ class BaseBenchmark(ABC):
         *,
         model: str,
         on_progress: Callable[[int, int, dict[str, Any]], Awaitable[None]] | None = None,
+        on_item: Callable[[QuestionResult, int, int], Awaitable[None]] | None = None,
         concurrency: int = 8,
         sampling: SamplingOverrides | None = None,
         thinking: str = "auto",
@@ -452,6 +453,7 @@ class BaseBenchmark(ABC):
             first = False
 
             # Score and accumulate
+            scored_in_batch: list[tuple[int, QuestionResult]] = []
             for idx, item, resp, err_kind, prompt_text in batch_results:
                 qid = str(item.get("id", idx))
                 cat = self.get_category(item)
@@ -485,6 +487,17 @@ class BaseBenchmark(ABC):
                         cache_hit=resp.cache_hit,
                     )
                 results_by_idx[idx] = qr
+                scored_in_batch.append((idx, qr))
+
+            # Emit per-item callback after scoring so the SSE stream can push
+            # prompt/response previews into the live log panel. Best-effort —
+            # caller failures don't break the run.
+            if on_item is not None:
+                for idx, qr in scored_in_batch:
+                    try:
+                        await on_item(qr, idx, total)
+                    except Exception:  # pragma: no cover
+                        logger.warning("on_item callback raised; ignoring", exc_info=True)
 
             completed += batch_size
             if on_progress is not None:

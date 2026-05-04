@@ -112,6 +112,20 @@ async def run_events(run_id: str, request: Request) -> EventSourceResponse:
 
 
 # -------------------------------------------------------- background runner
+def _trim_text(value: str | None, limit: int) -> str:
+    """Truncate to roughly `limit` chars at a whitespace boundary so the SSE
+    payload stays small. Returns "" for missing values so JSON encoders never
+    emit nulls (the SPA expects strings)."""
+    if not value:
+        return ""
+    if len(value) <= limit:
+        return value
+    cut = value.rfind(" ", 0, limit)
+    if cut <= limit - 60:
+        cut = limit
+    return value[:cut].rstrip() + "…"
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -148,6 +162,14 @@ def _event_content(payload: dict[str, Any]) -> str:
         if isinstance(cost, (int, float)):
             parts.append(f"cost=${cost:.4f}")
         return " · ".join(parts)
+
+    if event_type == "item":
+        idx = payload.get("index")
+        total = payload.get("total")
+        ok = "✓" if payload.get("correct") else "✗"
+        kind = payload.get("error_kind")
+        suffix = f" [{kind}]" if kind and kind not in ("ok", "wrong_answer") else ""
+        return f"{bench} #{idx}/{total} {ok}{suffix}"
 
     if event_type == "done":
         summary = payload.get("summary")
@@ -271,10 +293,38 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
                         "thinking_used": payload.get("thinking_used", False),
                     })
 
+                async def _on_item(qr, idx, total, _name=bench_name):
+                    # Stream a per-item summary so the SPA's live log can show
+                    # the actual prompt/response flowing through. We trim each
+                    # text to keep the SSE message small (one item event ≈ a
+                    # few KB instead of tens of KB).
+                    await _emit(state, {
+                        "type": "item",
+                        "bench": _name,
+                        "index": idx,
+                        "total": total,
+                        "question_id": qr.question_id,
+                        "correct": qr.correct,
+                        "expected": qr.expected[:120],
+                        "predicted": qr.predicted[:120],
+                        "error_kind": qr.error_kind,
+                        "latency_ms": qr.latency_ms,
+                        "cache_hit": qr.cache_hit,
+                        "prompt_preview": _trim_text(qr.prompt_text, 600),
+                        "text_preview": _trim_text(qr.raw_response, 600),
+                        "reasoning_preview": _trim_text(qr.reasoning_text, 400),
+                        "tokens": {
+                            "prompt": qr.usage.prompt_tokens,
+                            "completion": qr.usage.completion_tokens,
+                            "reasoning": qr.usage.reasoning_tokens,
+                        },
+                    })
+
                 result = await bench.run(
                     adapter, items,
                     model=req.connection.model,
                     on_progress=_on_progress,
+                    on_item=_on_item,
                     concurrency=req.concurrency,
                     sampling=sampling_obj,
                     thinking=req.thinking,
