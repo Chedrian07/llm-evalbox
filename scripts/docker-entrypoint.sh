@@ -10,8 +10,9 @@
 #
 # Why a token at all? `evalbox web` refuses non-loopback binds without
 # `--bind-token` (cli.py:659) — the token is checked as the
-# `x-evalbox-token` header on every API call, so a stray container
-# exposed on a host network can't be used as an open relay.
+# `x-evalbox-token` header on protected API calls, so a stray container
+# exposed on a host network can't be used as an open relay. Browsers can open
+# the printed bootstrap URL once to exchange the token for an HttpOnly cookie.
 set -e
 
 # Token gate. Only generate when:
@@ -21,14 +22,16 @@ host="${EVALBOX_WEB_HOST:-127.0.0.1}"
 case "$host" in
     127.0.0.1|::1|localhost) ;;
     *)
+        token="$EVALBOX_WEB_BIND_TOKEN"
         if [ -z "$EVALBOX_WEB_BIND_TOKEN" ]; then
             # `od -An -tx1 -N16 /dev/urandom` would also work but tr is
             # ubiquitous on slim images and produces a more compact form.
             token="$(tr -dc 'a-f0-9' < /dev/urandom | head -c 32)"
             export EVALBOX_WEB_BIND_TOKEN="$token"
             printf 'evalbox: bind-token=%s\n' "$token"
-            printf 'evalbox: include this as x-evalbox-token header on /api/* calls.\n'
         fi
+        printf 'evalbox: include this as x-evalbox-token header on protected /api/* calls.\n'
+        printf 'evalbox: browser-bootstrap=http://127.0.0.1:%s/?evalbox_token=%s\n' "${EVALBOX_WEB_PORT:-8765}" "$token"
         ;;
 esac
 

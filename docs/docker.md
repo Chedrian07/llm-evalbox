@@ -56,10 +56,15 @@ evalbox: bind-token=03f4…
 ```
 
 Grab it from `docker logs llm-evalbox` and pass it as the
-`x-evalbox-token` header on every `/api/*` call. The browser SPA at
-`http://127.0.0.1:8765/` is exempt because the compose port mapping
-(`127.0.0.1:8765:8765`) only exposes loopback to the host — nothing
-on the LAN can reach it.
+`x-evalbox-token` header on protected `/api/*` calls. `GET /api/health`
+stays public so Docker can run its healthcheck.
+
+For browser use, open the printed `browser-bootstrap=...` URL once. It
+sets an HttpOnly same-origin cookie and then redirects back to `/`, so
+the SPA's fetch and EventSource calls authenticate without exposing the
+token to JavaScript. A plain `GET /` does not mint a cookie; this keeps a
+host-network exposure from becoming "visit the homepage to unlock the
+API".
 
 To use a fixed token instead, set `EVALBOX_WEB_BIND_TOKEN=...` in
 `.env`.

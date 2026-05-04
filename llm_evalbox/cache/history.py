@@ -46,9 +46,6 @@ CREATE TABLE IF NOT EXISTS runs (
     notes           TEXT,
     starred         INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at);
-CREATE INDEX IF NOT EXISTS idx_runs_model ON runs(model);
-CREATE INDEX IF NOT EXISTS idx_runs_starred ON runs(starred);
 """
 
 # Idempotent column migrations for existing databases that predate the
@@ -63,6 +60,12 @@ _MIGRATIONS: tuple[str, ...] = (
     "ALTER TABLE runs ADD COLUMN starred INTEGER NOT NULL DEFAULT 0",
 )
 
+_INDEXES: tuple[str, ...] = (
+    "CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at)",
+    "CREATE INDEX IF NOT EXISTS idx_runs_model ON runs(model)",
+    "CREATE INDEX IF NOT EXISTS idx_runs_starred ON runs(starred)",
+)
+
 
 @contextmanager
 def _conn() -> Iterator[sqlite3.Connection]:
@@ -75,6 +78,8 @@ def _conn() -> Iterator[sqlite3.Connection]:
                 db.execute(stmt)
             except sqlite3.OperationalError:
                 pass  # column already present
+        for stmt in _INDEXES:
+            db.execute(stmt)
         yield db
     finally:
         db.close()

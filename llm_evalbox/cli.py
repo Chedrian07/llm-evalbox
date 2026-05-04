@@ -673,11 +673,17 @@ def cmd_web(
         raise typer.Exit(2) from None
 
     url = f"http://{host}:{port}"
+    browser_url = url
+    if bind_token:
+        from urllib.parse import quote
+        browser_url = f"{url}/?evalbox_token={quote(bind_token, safe='')}"
     console.print(f"[bold]evalbox web[/bold] {url} (version {__version__})")
+    if bind_token:
+        console.print(f"[dim]browser bootstrap:[/dim] {browser_url}")
     if not no_open and host in ("127.0.0.1", "localhost"):
         try:
             import webbrowser
-            webbrowser.open(url)
+            webbrowser.open(browser_url)
         except Exception:
             pass
     run_server(host=host, port=port, bind_token=bind_token, reload=reload)

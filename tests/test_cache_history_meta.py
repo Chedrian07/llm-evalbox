@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from llm_evalbox.cache import list_runs, upsert_run
-from llm_evalbox.cache.history import update_run_meta
+from llm_evalbox.cache.history import history_db_path, update_run_meta
 
 
 @pytest.fixture(autouse=True)
@@ -114,3 +116,53 @@ def test_repeated_alter_is_idempotent():
     update_run_meta("r1", starred=True)
     rows = list_runs()
     assert len(rows) == 2
+
+
+def test_legacy_db_migrates_before_starred_index():
+    db_path = history_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as db:
+        db.execute(
+            """
+            CREATE TABLE runs (
+                run_id          TEXT PRIMARY KEY,
+                started_at      TEXT NOT NULL,
+                finished_at     TEXT,
+                model           TEXT,
+                base_url        TEXT,
+                adapter         TEXT,
+                accuracy_macro  REAL,
+                cost_usd        REAL,
+                bench_count     INTEGER,
+                payload         TEXT NOT NULL
+            )
+            """
+        )
+        db.execute(
+            """
+            INSERT INTO runs(run_id, started_at, finished_at, model, base_url,
+                             adapter, accuracy_macro, cost_usd, bench_count, payload)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy",
+                "2026-05-04T00:00:00Z",
+                "2026-05-04T00:01:00Z",
+                "gpt-5.4-mini",
+                "https://x",
+                "auto",
+                0.8,
+                0.01,
+                1,
+                '{"run_id":"legacy"}',
+            ),
+        )
+
+    rows = list_runs()
+    assert rows[0]["run_id"] == "legacy"
+    assert rows[0]["tags"] == []
+    assert rows[0]["notes"] is None
+    assert rows[0]["starred"] is False
+
+    assert update_run_meta("legacy", starred=True) is True
+    assert {row["run_id"] for row in list_runs(starred_only=True)} == {"legacy"}

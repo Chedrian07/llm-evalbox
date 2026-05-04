@@ -15,7 +15,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from llm_evalbox._version import __version__
@@ -84,17 +84,9 @@ def build_app(*, bind_token: str | None = None) -> FastAPI:
     if bind_token:
         @app.middleware("http")
         async def _check_token(request, call_next):
-            # The SPA-running browser at 127.0.0.1 doesn't know the token.
-            # We bridge that gap by setting `evalbox_token` as an HttpOnly
-            # cookie on the SPA HTML response — every subsequent fetch()
-            # sends it automatically (same-origin) and the API check
-            # passes. A direct script hitting /api/* without going through
-            # `/` first still needs the X-Evalbox-Token header (or cookie),
-            # so the gate's threat model (random LAN scanners can't poke
-            # the API) remains intact.
             path = request.url.path
             is_api = path.startswith("/api/")
-            if is_api:
+            if is_api and path != "/api/health":
                 supplied = (
                     request.headers.get("x-evalbox-token", "")
                     or request.cookies.get("evalbox_token", "")
@@ -102,12 +94,14 @@ def build_app(*, bind_token: str | None = None) -> FastAPI:
                 if supplied != bind_token:
                     from fastapi.responses import JSONResponse
                     return JSONResponse(status_code=401, content={"detail": "missing or bad X-Evalbox-Token"})
-            response = await call_next(request)
-            # Seed the cookie on every non-API response so the SPA shell
-            # picks it up on first load. `samesite=strict` keeps it out
-            # of cross-origin requests; `httponly` keeps JS from reading
-            # it (which is fine — fetch() sends cookies regardless).
-            if not is_api:
+
+            bootstrap_token = (
+                request.query_params.get("evalbox_token")
+                or request.query_params.get("token")
+            )
+            if not is_api and bootstrap_token == bind_token:
+                redirect_url = request.url.remove_query_params(["evalbox_token", "token"])
+                response = RedirectResponse(str(redirect_url), status_code=303)
                 response.set_cookie(
                     "evalbox_token",
                     bind_token,
@@ -115,7 +109,9 @@ def build_app(*, bind_token: str | None = None) -> FastAPI:
                     samesite="strict",
                     path="/",
                 )
-            return response
+                return response
+
+            return await call_next(request)
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:

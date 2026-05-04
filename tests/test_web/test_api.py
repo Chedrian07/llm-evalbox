@@ -344,15 +344,16 @@ def test_unknown_bench_returns_400(client):
 
 
 def test_bind_token_required():
-    """When bind_token is set, /api/* requires X-Evalbox-Token."""
+    """When bind_token is set, protected /api/* requires X-Evalbox-Token."""
     app = build_app(bind_token="secret-xyz")
     c = TestClient(app)
+    assert c.get("/api/health").status_code == 200
     # No token → 401
-    r = c.get("/api/health")
+    r = c.get("/api/benchmarks")
     assert r.status_code == 401
     # Wrong token → 401
-    r = c.get("/api/health", headers={"X-Evalbox-Token": "nope"})
+    r = c.get("/api/benchmarks", headers={"X-Evalbox-Token": "nope"})
     assert r.status_code == 401
     # Correct token → 200
-    r = c.get("/api/health", headers={"X-Evalbox-Token": "secret-xyz"})
+    r = c.get("/api/benchmarks", headers={"X-Evalbox-Token": "secret-xyz"})
     assert r.status_code == 200
