@@ -171,11 +171,20 @@
     "cache_hits": "캐시 hit",
     "response_cache": "응답 캐시",
     "category": "카테고리",
-    "errors": "에러"
+    "errors": "에러",
+    "toggle_star": "별표 토글",
+    "star": "별표",
+    "starred": "별표됨",
+    "remove_tag": "태그 제거",
+    "add_tag": "+ 태그",
+    "notes_placeholder": "메모…"
   },
   "history": {
     "title": "히스토리",
-    "clear": "비우기"
+    "clear": "비우기",
+    "search_placeholder": "모델 · 태그 · 노트 검색",
+    "starred_only": "별표만",
+    "no_matches": "필터에 맞는 항목 없음"
   },
   "error": {
     "title": "오류",

@@ -155,6 +155,15 @@ export interface HistorySummary {
   accuracy_macro: number | null;
   cost_usd: number | null;
   bench_count: number;
+  tags?: string[];
+  notes?: string | null;
+  starred?: boolean;
+}
+
+export interface HistoryMetaPatch {
+  tags?: string[];
+  notes?: string;
+  starred?: boolean;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -241,8 +250,20 @@ export const api = {
   getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),
   cancelRun: (id: string) =>
     request<{ status: string }>(`/api/runs/${id}`, { method: "DELETE" }),
-  history: (limit = 100) => request<HistorySummary[]>(`/api/history?limit=${limit}`),
+  history: (params: { limit?: number; model?: string; starred?: boolean; tag?: string } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set("limit", String(params.limit ?? 100));
+    if (params.model) qs.set("model", params.model);
+    if (params.starred) qs.set("starred", "true");
+    if (params.tag) qs.set("tag", params.tag);
+    return request<HistorySummary[]>(`/api/history?${qs.toString()}`);
+  },
   getHistory: (id: string) => request<RunResult>(`/api/history/${encodeURIComponent(id)}`),
+  patchHistory: (id: string, patch: HistoryMetaPatch) =>
+    request<{ updated: boolean }>(`/api/history/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
   deleteHistory: (id: string) =>
     request<{ status: string }>(`/api/history/${encodeURIComponent(id)}`, { method: "DELETE" }),
   clearHistory: () => request<{ deleted: number }>("/api/history", { method: "DELETE" }),

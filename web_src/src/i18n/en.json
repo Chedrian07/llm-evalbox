@@ -171,11 +171,20 @@
     "cache_hits": "cache hits",
     "response_cache": "response cache",
     "category": "category",
-    "errors": "errors"
+    "errors": "errors",
+    "toggle_star": "Toggle star",
+    "star": "Star",
+    "starred": "Starred",
+    "remove_tag": "Remove tag",
+    "add_tag": "+ tag",
+    "notes_placeholder": "Notes…"
   },
   "history": {
     "title": "History",
-    "clear": "Clear"
+    "clear": "Clear",
+    "search_placeholder": "model · tag · notes",
+    "starred_only": "Starred only",
+    "no_matches": "no matches"
   },
   "error": {
     "title": "Error",

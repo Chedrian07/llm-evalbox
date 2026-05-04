@@ -41,11 +41,27 @@ CREATE TABLE IF NOT EXISTS runs (
     accuracy_macro  REAL,
     cost_usd        REAL,
     bench_count     INTEGER,
-    payload         TEXT NOT NULL
+    payload         TEXT NOT NULL,
+    tags            TEXT,
+    notes           TEXT,
+    starred         INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at);
 CREATE INDEX IF NOT EXISTS idx_runs_model ON runs(model);
+CREATE INDEX IF NOT EXISTS idx_runs_starred ON runs(starred);
 """
+
+# Idempotent column migrations for existing databases that predate the
+# tags / notes / starred fields. Each ALTER TABLE is wrapped in a
+# try/except because SQLite raises OperationalError when the column
+# already exists. We do this every connection — overhead is negligible
+# and it keeps multi-process upgrades correct (CLI + Web running side by
+# side).
+_MIGRATIONS: tuple[str, ...] = (
+    "ALTER TABLE runs ADD COLUMN tags TEXT",
+    "ALTER TABLE runs ADD COLUMN notes TEXT",
+    "ALTER TABLE runs ADD COLUMN starred INTEGER NOT NULL DEFAULT 0",
+)
 
 
 @contextmanager
@@ -54,6 +70,11 @@ def _conn() -> Iterator[sqlite3.Connection]:
     db.row_factory = sqlite3.Row
     try:
         db.executescript(_SCHEMA)
+        for stmt in _MIGRATIONS:
+            try:
+                db.execute(stmt)
+            except sqlite3.OperationalError:
+                pass  # column already present
         yield db
     finally:
         db.close()
@@ -97,24 +118,92 @@ def upsert_run(payload: dict[str, Any]) -> None:
         logger.warning("history: failed to persist run %s: %s", payload.get("run_id"), e)
 
 
-def list_runs(*, limit: int = 100, model: str | None = None) -> list[dict[str, Any]]:
-    """Return summary rows newest first."""
+_SELECT_COLS = (
+    "run_id, started_at, finished_at, model, base_url, adapter, "
+    "accuracy_macro, cost_usd, bench_count, tags, notes, starred"
+)
+
+
+def list_runs(
+    *,
+    limit: int = 100,
+    model: str | None = None,
+    starred_only: bool = False,
+    tag: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return summary rows newest first.
+
+    `starred_only`: only rows with starred=1.
+    `tag`: substring match against the comma-separated `tags` column.
+    Tags are stored as a flat comma-joined string (we don't expect more
+    than a handful per run); SQLite's `INSTR` is enough for filtering.
+    """
+    where: list[str] = []
+    params: list[Any] = []
+    if model:
+        where.append("model = ?")
+        params.append(model)
+    if starred_only:
+        where.append("starred = 1")
+    if tag:
+        where.append("(',' || COALESCE(tags, '') || ',') LIKE ?")
+        params.append(f"%,{tag},%")
+    sql = f"SELECT {_SELECT_COLS} FROM runs"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY started_at DESC LIMIT ?"
+    params.append(limit)
     with _conn() as db:
-        if model:
-            rows = db.execute(
-                "SELECT run_id, started_at, finished_at, model, base_url, adapter, "
-                "accuracy_macro, cost_usd, bench_count "
-                "FROM runs WHERE model = ? ORDER BY started_at DESC LIMIT ?",
-                (model, limit),
-            ).fetchall()
-        else:
-            rows = db.execute(
-                "SELECT run_id, started_at, finished_at, model, base_url, adapter, "
-                "accuracy_macro, cost_usd, bench_count "
-                "FROM runs ORDER BY started_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-    return [dict(r) for r in rows]
+        rows = db.execute(sql, tuple(params)).fetchall()
+    return [_row_to_dict(r) for r in rows]
+
+
+def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    out = dict(row)
+    # Normalise tags from "a,b,c" → ["a","b","c"]; null → [] so the SPA
+    # can iterate without a guard.
+    raw = out.get("tags")
+    out["tags"] = [t for t in (raw or "").split(",") if t]
+    out["starred"] = bool(out.get("starred"))
+    return out
+
+
+def update_run_meta(
+    run_id: str,
+    *,
+    tags: list[str] | None = None,
+    notes: str | None = None,
+    starred: bool | None = None,
+) -> bool:
+    """Partial update — only non-None fields are written.
+
+    `tags`: full list replaces what's stored. Whitespace-only entries are
+    dropped; commas inside tag names are stripped (they'd corrupt the
+    `INSTR` filter).
+    `notes`: empty string clears the field (caller intent).
+    `starred`: True/False.
+    """
+    sets: list[str] = []
+    params: list[Any] = []
+    if tags is not None:
+        cleaned = [t.strip().replace(",", "") for t in tags if t and t.strip()]
+        sets.append("tags = ?")
+        params.append(",".join(cleaned) if cleaned else None)
+    if notes is not None:
+        sets.append("notes = ?")
+        params.append(notes if notes else None)
+    if starred is not None:
+        sets.append("starred = ?")
+        params.append(1 if starred else 0)
+    if not sets:
+        return False
+    params.append(run_id)
+    with _conn() as db:
+        cur = db.execute(
+            f"UPDATE runs SET {', '.join(sets)} WHERE run_id = ?",
+            tuple(params),
+        )
+    return cur.rowcount > 0
 
 
 def get_run(run_id: str) -> dict[str, Any] | None:

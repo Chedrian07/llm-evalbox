@@ -15,6 +15,9 @@ export interface HistoryEntry {
   base_url: string;
   source?: "server" | "local";
   result: RunResult;
+  tags?: string[];
+  notes?: string | null;
+  starred?: boolean;
 }
 
 function open(): Promise<IDBDatabase> {
@@ -79,7 +82,7 @@ export async function clearHistory(): Promise<void> {
 }
 
 export async function listServerHistory(limit = 100): Promise<HistoryEntry[]> {
-  const rows = await api.history(limit);
+  const rows = await api.history({ limit });
   const details = await Promise.allSettled(rows.map((row) => api.getHistory(row.run_id)));
   return details.flatMap((res, index) => {
     if (res.status !== "fulfilled") return [];
@@ -92,6 +95,9 @@ export async function listServerHistory(limit = 100): Promise<HistoryEntry[]> {
       base_url: result.provider?.base_url || row.base_url || "",
       source: "server" as const,
       result,
+      tags: row.tags ?? [],
+      notes: row.notes ?? null,
+      starred: row.starred ?? false,
     }];
   });
 }

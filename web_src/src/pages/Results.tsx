@@ -11,6 +11,7 @@ import { CostVsAccuracyChart } from "@/components/charts/cost-vs-accuracy";
 import { RadarChartComparison } from "@/components/charts/radar-chart";
 import { LiveLogPanel, messagesToLogEntries } from "@/components/live-log-panel";
 import { RunHistorySidebar } from "@/components/run-history-sidebar";
+import { RunMetaEditor } from "@/components/run-meta-editor";
 import { api, type BenchmarkResult, type RunResult } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { listMergedHistory, saveHistory, type HistoryEntry } from "@/lib/history";
@@ -135,6 +136,20 @@ export function ResultsPage() {
               <p className="text-sm text-muted-foreground">…</p>
             ) : (
               <div className="space-y-4">
+                {s.runId && (
+                  <RunMetaEditor
+                    runId={s.runId}
+                    initialTags={
+                      history.find((h) => h.run_id === s.runId)?.tags ?? []
+                    }
+                    initialNotes={
+                      history.find((h) => h.run_id === s.runId)?.notes ?? ""
+                    }
+                    initialStarred={
+                      history.find((h) => h.run_id === s.runId)?.starred ?? false
+                    }
+                  />
+                )}
                 <SummaryCards r={r} />
                 {tab === "matrix" ? (
                   <Matrix r={r} />
