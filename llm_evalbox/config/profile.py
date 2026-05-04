@@ -27,11 +27,21 @@ if sys.version_info >= (3, 11):
 else:  # pragma: no cover - 3.10 fallback
     import tomli as tomllib  # type: ignore[no-redef]
 
+from llm_evalbox.cache.store import config_root
 from llm_evalbox.core.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
 
-PROFILE_PATH = Path("~/.config/llm-evalbox/profiles.toml").expanduser()
+
+def profile_path() -> Path:
+    return config_root() / "profiles.toml"
+
+
+# Back-compat alias for callers/tests that imported the constant.
+# Note: this resolves at import time — code that needs the live value
+# (e.g. tests that monkeypatch EVALBOX_DATA_DIR) should call
+# `profile_path()` instead.
+PROFILE_PATH = profile_path()
 
 
 @dataclass
@@ -48,14 +58,15 @@ def load_profile(name: str | None) -> Profile | None:
     """Return the named profile, or None when no profiles file exists."""
     if name is None:
         return None
-    if not PROFILE_PATH.exists():
+    path = profile_path()
+    if not path.exists():
         raise ConfigError(
-            f"profile {name!r} requested but {PROFILE_PATH} does not exist."
+            f"profile {name!r} requested but {path} does not exist."
         )
-    with open(PROFILE_PATH, "rb") as f:
+    with open(path, "rb") as f:
         data = tomllib.load(f)
     if name not in data:
-        raise ConfigError(f"profile {name!r} not found in {PROFILE_PATH}")
+        raise ConfigError(f"profile {name!r} not found in {path}")
     raw = data[name]
     return Profile(
         name=name,

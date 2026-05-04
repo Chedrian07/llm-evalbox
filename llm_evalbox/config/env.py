@@ -16,6 +16,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from llm_evalbox.cache.store import config_root
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +37,7 @@ def load_env_files(explicit: str | None = None) -> list[Path]:
         load_dotenv(cwd_env, override=False)
         loaded.append(cwd_env)
 
-    user_env = Path("~/.config/llm-evalbox/.env").expanduser()
+    user_env = config_root() / ".env"
     if user_env.exists():
         load_dotenv(user_env, override=False)
         loaded.append(user_env)

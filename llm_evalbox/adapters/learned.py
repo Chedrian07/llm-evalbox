@@ -29,13 +29,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from llm_evalbox.cache.store import config_root
+
 logger = logging.getLogger(__name__)
 
 _VERSION = 1
 
 
 def store_path() -> Path:
-    return Path("~/.config/llm-evalbox/learned_capabilities.json").expanduser()
+    return config_root() / "learned_capabilities.json"
 
 
 def _load() -> dict[str, Any]:
