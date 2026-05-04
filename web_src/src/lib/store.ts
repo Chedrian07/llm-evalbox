@@ -182,12 +182,24 @@ export const useApp = create<AppState>((set, get) => ({
       // (e.g. React StrictMode double-effect or HMR). The App.tsx guard
       // also blocks the second call, but we belt-and-suspenders here.
       if (prev.hydrated) return {};
+      // Coerce adapter / thinking to known values — users sometimes type
+      // EVALBOX_ADAPTER=none (or anything else) into .env. Falling back to
+      // prev keeps the segmented control showing an active option instead
+      // of being completely blank.
+      const validAdapters = ["auto", "chat_completions", "responses"] as const;
+      const validThinking = ["auto", "on", "off"] as const;
+      const adapter = (validAdapters as readonly string[]).includes(d.adapter ?? "")
+        ? (d.adapter as AppState["adapter"])
+        : prev.adapter;
+      const thinking = (validThinking as readonly string[]).includes(d.thinking ?? "")
+        ? (d.thinking as AppState["thinking"])
+        : prev.thinking;
       return {
         baseUrl: d.base_url ?? prev.baseUrl,
         model: d.model ?? prev.model,
-        adapter: (d.adapter as AppState["adapter"]) ?? prev.adapter,
+        adapter,
         apiKeyEnv: d.api_key_env ?? prev.apiKeyEnv,
-        thinking: ((d.thinking as AppState["thinking"]) ?? prev.thinking),
+        thinking: thinking,
         reasoningEffort: d.reasoning_effort ?? prev.reasoningEffort,
         concurrency: d.concurrency ?? prev.concurrency,
         maxCostUsd: d.max_cost_usd ?? prev.maxCostUsd,

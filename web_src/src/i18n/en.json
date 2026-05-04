@@ -106,7 +106,8 @@
     "no_cache_short": "no cache",
     "prompt_cache_short": "prompt cache",
     "strict_short": "strict",
-    "no_rerun_short": "no rerun"
+    "no_rerun_short": "no rerun",
+    "advanced": "Advanced"
   },
   "plan": {
     "title": "Run plan",

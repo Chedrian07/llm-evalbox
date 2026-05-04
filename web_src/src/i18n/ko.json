@@ -106,7 +106,8 @@
     "no_cache_short": "캐시 끔",
     "prompt_cache_short": "prompt cache",
     "strict_short": "엄격",
-    "no_rerun_short": "재실행 안 함"
+    "no_rerun_short": "재실행 안 함",
+    "advanced": "고급 옵션"
   },
   "plan": {
     "title": "실행 계획",

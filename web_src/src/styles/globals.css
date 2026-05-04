@@ -2,14 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Dark-first theme. Light tokens are kept as fallback but the app forces
+ * dark via the body class in main.tsx (see App). We layer surfaces by
+ * tweaking lightness — `surface-1` is lighter than the page bg, `surface-2`
+ * lighter than that — so overlapping cards read like a stack.
+ *
+ * Accent colour is emerald (HSL 152 64% 50%). Used for the hero "Run"
+ * button, selected-benchmark borders, success badges, key-detected chips.
+ * `--ring` matches the accent so focus state pops on the same hue.
+ */
+
 @layer base {
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --surface-1: 210 40% 98%;
+    --surface-2: 210 40% 96%;
+    --primary: 152 64% 40%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
@@ -18,30 +31,34 @@
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
+    --warning: 38 92% 50%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 152 64% 45%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 222 25% 6%;
     --foreground: 210 40% 98%;
-    --card: 222.2 30% 8%;
+    --card: 222 22% 9%;
     --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    --surface-1: 222 22% 11%;
+    --surface-2: 222 22% 14%;
+    --primary: 152 64% 50%;
+    --primary-foreground: 222 47% 8%;
+    --secondary: 217 32% 17%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted: 217 32% 14%;
+    --muted-foreground: 215 16% 65%;
+    --accent: 217 32% 17%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 70% 50%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 22%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --warning: 38 92% 55%;
+    --border: 217 28% 18%;
+    --input: 217 28% 22%;
+    --ring: 152 64% 50%;
   }
 }
 
@@ -50,5 +67,33 @@
     @apply bg-background text-foreground antialiased;
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
       "Helvetica Neue", Arial, "Noto Sans KR", sans-serif;
+    /* Subtle radial accent in the top-left so the empty-state isn't a flat slab. */
+    background-image:
+      radial-gradient(60rem 30rem at 0% -10%, hsl(var(--primary) / 0.08), transparent 70%),
+      radial-gradient(40rem 20rem at 100% 0%, hsl(217 60% 30% / 0.10), transparent 70%);
+    background-attachment: fixed;
+  }
+
+  /* Tighten focus rings — the 1px default is invisible on dark borders. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .surface-1 {
+    background-color: hsl(var(--surface-1));
+  }
+  .surface-2 {
+    background-color: hsl(var(--surface-2));
+  }
+  /* Segmented control item base — the active-state styling is up to the caller. */
+  .segmented-item {
+    @apply relative inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors;
+    @apply text-muted-foreground hover:text-foreground;
+  }
+  .segmented-item[data-active="true"] {
+    @apply bg-primary/10 text-foreground ring-1 ring-primary/40;
   }
 }

@@ -6,6 +6,8 @@ import { App } from "./App";
 import "./i18n";
 import "./styles/globals.css";
 
+document.documentElement.classList.add("dark");
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: false, refetchOnWindowFocus: false },
