@@ -40,6 +40,12 @@ class ConnectionResponse(BaseModel):
     text_preview: str | None = None
     capability: CapabilityInfo
     learned_drop_params: list[str] = Field(default_factory=list)
+    # When the backend rewrote a localhost-equivalent base_url to
+    # `host.docker.internal` for the in-flight call, this carries the
+    # rewritten URL. The SPA shows a small chip so the user knows their
+    # input was honoured (and where the call actually went). `None` when
+    # no rewrite happened — the caller's input is the effective URL.
+    effective_base_url: str | None = None
     error: str | None = None
 
 

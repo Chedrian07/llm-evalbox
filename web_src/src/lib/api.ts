@@ -32,6 +32,10 @@ export interface ConnectionResponse {
   text_preview: string | null;
   capability: CapabilityInfo;
   learned_drop_params: string[];
+  /** Backend rewrote the user's localhost-equivalent base_url to
+      `host.docker.internal` for the in-flight call. Null when no rewrite
+      was applied. */
+  effective_base_url: string | null;
   error: string | null;
 }
 

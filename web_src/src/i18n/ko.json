@@ -38,6 +38,7 @@
     "models_count": "{{count}}개 모델",
     "models_refresh": "새로고침",
     "models_error": "이 게이트웨이는 /v1/models 를 노출하지 않음 — 모델명 직접 입력",
+    "localhost_rewritten": "컨테이너 안 → 호스트 매핑:",
     "model_picker_title": "조회된 모델",
     "model_picker_showing": "{{visible}} / {{total}}",
     "model_picker_select": "조회된 모델에서 선택",

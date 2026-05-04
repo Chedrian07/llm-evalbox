@@ -13,6 +13,7 @@ from llm_evalbox.adapters.capabilities import (
     capability_for,
     parse_unsupported_param_error,
 )
+from llm_evalbox.adapters.url_rewrite import rewrite_localhost
 from llm_evalbox.core.exceptions import BadRequestError, EvalBoxError
 from llm_evalbox.core.messages import Message
 from llm_evalbox.core.request import ChatRequest
@@ -40,12 +41,17 @@ async def test_connection(req: ConnectionRequest) -> ConnectionResponse:
     )
 
     api_key = req.api_key or resolve_api_key(req.api_key_env)
+    # Probe the rewrite so the SPA can show "localhost → host.docker.internal"
+    # before/after the call. resolve_adapter rewrites internally too — we just
+    # need the boolean here.
+    rewritten_url, did_rewrite = rewrite_localhost(req.base_url)
     adapter = resolve_adapter(
         kind=req.adapter,
-        base_url=req.base_url,
+        base_url=req.base_url,  # auto.py rewrites internally; pass the original
         api_key=api_key,
         extra_headers=req.extra_headers,
     )
+    effective_base_url = rewritten_url if did_rewrite else None
 
     model_listed: bool | None = None
     model_count: int | None = None
@@ -84,6 +90,7 @@ async def test_connection(req: ConnectionRequest) -> ConnectionResponse:
                 ok=False, adapter=adapter.name,
                 model_listed=model_listed, model_count=model_count,
                 capability=cap_info, error=str(e),
+                effective_base_url=effective_base_url,
             )
 
     await adapter.close()
@@ -95,6 +102,7 @@ async def test_connection(req: ConnectionRequest) -> ConnectionResponse:
             capability=cap_info,
             learned_drop_params=drop_params,
             error=str(last_error) if last_error else "dry chat failed",
+            effective_base_url=effective_base_url,
         )
 
     return ConnectionResponse(
@@ -108,4 +116,5 @@ async def test_connection(req: ConnectionRequest) -> ConnectionResponse:
         text_preview=resp.text[:120],
         capability=cap_info,
         learned_drop_params=drop_params,
+        effective_base_url=effective_base_url,
     )

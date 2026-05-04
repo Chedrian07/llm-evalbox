@@ -223,13 +223,19 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
       )}
 
       {/* Error / capability footer */}
-      {(err || s.capability) && (
+      {(err || s.capability || s.conn?.effective_base_url) && (
         <footer className="border-t border-border/60 px-4 py-3">
           {err && (
             <p className="mb-2 inline-flex items-center gap-1.5 text-sm text-destructive">
               <XCircle className="h-4 w-4" />
               {err.slice(0, 240)}
             </p>
+          )}
+          {s.conn?.effective_base_url && (
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[0.7rem] text-amber-300">
+              <span className="font-medium">{t("connection.localhost_rewritten")}</span>
+              <code className="font-mono opacity-80">{s.conn.effective_base_url}</code>
+            </div>
           )}
           {s.capability && (
             <div className="flex flex-wrap gap-1.5">

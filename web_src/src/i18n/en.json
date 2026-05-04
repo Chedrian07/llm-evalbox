@@ -38,6 +38,7 @@
     "models_count": "{{count}} models",
     "models_refresh": "Refresh",
     "models_error": "This gateway doesn't expose /v1/models — type the model name",
+    "localhost_rewritten": "Rewrote localhost →",
     "model_picker_title": "Available models",
     "model_picker_showing": "{{visible}} / {{total}}",
     "model_picker_select": "Choose from discovered models",
