@@ -9,7 +9,7 @@ import { ConnectionCard } from "@/components/connection-card";
 import { AnswerDiff } from "@/components/charts/answer-diff";
 import { CostVsAccuracyChart } from "@/components/charts/cost-vs-accuracy";
 import { RadarChartComparison } from "@/components/charts/radar-chart";
-import { RunMessages } from "@/components/run-messages";
+import { LiveLogPanel, messagesToLogEntries } from "@/components/live-log-panel";
 import { RunHistorySidebar } from "@/components/run-history-sidebar";
 import { api, type BenchmarkResult, type RunResult } from "@/lib/api";
 import { useApp } from "@/lib/store";
@@ -85,8 +85,8 @@ export function ResultsPage() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
-      <div className="space-y-4">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="min-w-0 space-y-4">
         <ConnectionCard compact />
         <Card>
           <CardHeader>
@@ -145,11 +145,18 @@ export function ResultsPage() {
                 ) : tab === "diff" ? (
                   <AnswerDiff runs={history} />
                 ) : tab === "messages" ? (
-                  <RunMessages messages={r.messages ?? []} empty={t("run.no_messages")!} limit={200} />
+                  <div className="h-[70vh] min-h-[24rem]">
+                    <LiveLogPanel
+                      entries={messagesToLogEntries(r.messages ?? [])}
+                      defaultAutoScroll={false}
+                    />
+                  </div>
                 ) : (
-                  <pre className="overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed">
-                    {JSON.stringify(r, null, 2)}
-                  </pre>
+                  <div className="max-h-[70vh] min-h-[24rem] overflow-auto rounded-md border border-border/40 bg-[hsl(222,30%,4%)]">
+                    <pre className="whitespace-pre p-3 font-mono text-xs leading-relaxed text-foreground/90">
+                      {JSON.stringify(r, null, 2)}
+                    </pre>
+                  </div>
                 )}
               </div>
             )}

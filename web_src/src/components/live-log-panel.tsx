@@ -48,11 +48,72 @@ export interface LogEntry {
 
 const LIMITS = [200, 500, 1000, 2000] as const;
 
-export function LiveLogPanel({ entries, onClear }: { entries: LogEntry[]; onClear: () => void }) {
+/**
+ * Convert persisted run messages (backend `RunMessage[]`) into the same
+ * LogEntry shape the live stream uses. Lets the Results page reuse this
+ * panel for the saved Messages log without parallel rendering code.
+ */
+export function messagesToLogEntries(
+  messages: { role?: string; content?: string; created_at?: string; metadata?: any }[],
+): LogEntry[] {
+  return messages.map((m, i) => {
+    const md = m.metadata ?? {};
+    const type = String(md.type ?? "system");
+    const ts = m.created_at ? new Date(m.created_at).getTime() : Date.now();
+    if (type === "item") {
+      return {
+        id: i,
+        ts,
+        kind: "item",
+        bench: md.bench,
+        index: md.index,
+        total: md.total,
+        correct: !!md.correct,
+        errorKind: md.error_kind,
+        expected: md.expected,
+        predicted: md.predicted,
+        promptPreview: md.prompt_preview,
+        textPreview: md.text_preview,
+        reasoningPreview: md.reasoning_preview,
+        latencyMs: md.latency_ms,
+        cacheHit: !!md.cache_hit,
+        tokens: md.tokens,
+        text: m.content ?? "",
+      };
+    }
+    const kind: LogEntry["kind"] =
+      type === "progress" || type === "result" || type === "error" || type === "done"
+        ? type
+        : "system";
+    return {
+      id: i,
+      ts,
+      kind,
+      bench: md.bench,
+      text: m.content ?? type,
+    };
+  });
+}
+
+export function LiveLogPanel({
+  entries,
+  onClear,
+  defaultAutoScroll = true,
+  defaultLimit = 500,
+  defaultShowProgress = true,
+}: {
+  entries: LogEntry[];
+  /** Optional. When omitted, the clear button is hidden — useful for static
+      logs (Results page) that have no live-stream semantics. */
+  onClear?: () => void;
+  defaultAutoScroll?: boolean;
+  defaultLimit?: (typeof LIMITS)[number];
+  defaultShowProgress?: boolean;
+}) {
   const { t } = useTranslation();
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [limit, setLimit] = useState<(typeof LIMITS)[number]>(500);
-  const [showProgress, setShowProgress] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(defaultAutoScroll);
+  const [limit, setLimit] = useState<(typeof LIMITS)[number]>(defaultLimit);
+  const [showProgress, setShowProgress] = useState(defaultShowProgress);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(() => {
@@ -128,15 +189,17 @@ export function LiveLogPanel({ entries, onClear }: { entries: LogEntry[]; onClea
           >
             {autoScroll ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
           </button>
-          <button
-            type="button"
-            onClick={onClear}
-            className="rounded-md border border-border/40 p-1 text-muted-foreground transition hover:border-border hover:text-foreground"
-            title={t("log.clear", { defaultValue: "Clear" })!}
-            aria-label={t("log.clear", { defaultValue: "Clear" })!}
-          >
-            <Eraser className="h-3 w-3" />
-          </button>
+          {onClear && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="rounded-md border border-border/40 p-1 text-muted-foreground transition hover:border-border hover:text-foreground"
+              title={t("log.clear", { defaultValue: "Clear" })!}
+              aria-label={t("log.clear", { defaultValue: "Clear" })!}
+            >
+              <Eraser className="h-3 w-3" />
+            </button>
+          )}
         </div>
       </header>
 
