@@ -130,6 +130,7 @@
     "code_consent_required": "Accept local code execution to include code benchmarks",
     "cancel": "Cancel run",
     "running_accuracy": "Running accuracy",
+    "per_bench": "per benchmark · x = sample index",
     "thinking_on": "thinking on",
     "loading": "loading dataset",
     "completed": "completed",

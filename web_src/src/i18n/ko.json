@@ -130,6 +130,7 @@
     "code_consent_required": "코드 벤치 포함하려면 로컬 코드 실행을 허용하세요",
     "cancel": "실행 취소",
     "running_accuracy": "현재 정확도",
+    "per_bench": "벤치마크별 · x = 샘플 인덱스",
     "thinking_on": "thinking on",
     "loading": "데이터셋 로드",
     "completed": "완료",

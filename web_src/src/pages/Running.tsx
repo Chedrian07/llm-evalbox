@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import {
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -30,15 +31,28 @@ import { useApp } from "@/lib/store";
 import { fmtAccLive, fmtCap, fmtCost, fmtElapsed } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
-interface AccumPoint {
-  done: number;
+interface BenchPoint {
+  x: number;
   acc: number;
 }
+
+// Distinct colors so each bench's line stays readable. The first color is
+// the brand emerald so a single-bench run still feels native.
+const BENCH_COLORS = [
+  "hsl(152, 64%, 50%)", // emerald (primary)
+  "hsl(206, 90%, 60%)", // blue
+  "hsl(38, 92%, 60%)",  // amber
+  "hsl(280, 70%, 65%)", // violet
+  "hsl(330, 78%, 65%)", // pink
+  "hsl(180, 70%, 55%)", // cyan
+  "hsl(15, 85%, 60%)",  // orange
+  "hsl(60, 80%, 55%)",  // yellow
+];
 
 export function RunningPage() {
   const { t } = useTranslation();
   const s = useApp();
-  const [series, setSeries] = useState<AccumPoint[]>([]);
+  const [seriesByBench, setSeriesByBench] = useState<Record<string, BenchPoint[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [now, setNow] = useState(Date.now());
@@ -95,13 +109,21 @@ export function RunningPage() {
           running_accuracy: data.running_accuracy,
           thinking_used: data.thinking_used,
         });
-        setSeries((prev) => {
-          const all = Object.values(useApp.getState().benchProgress);
-          const totalDone = all.reduce((acc, b) => acc + b.current, 0);
-          const acc = data.running_accuracy ?? 0;
-          if (totalDone > 0) return [...prev, { done: totalDone, acc }].slice(-200);
-          return prev;
-        });
+        // Per-bench series so each benchmark gets its own line. Plotting
+        // a single global line caused the chart to drop to zero whenever
+        // a new bench started.
+        if (data.bench && typeof data.current === "number" && data.current > 0) {
+          const point = { x: data.current, acc: data.running_accuracy ?? 0 };
+          setSeriesByBench((prev) => {
+            const cur = prev[data.bench] ?? [];
+            // De-dupe consecutive same-x updates (multiple progress events
+            // can fire for the same `current` if the auto-thinking rerun
+            // re-emits a batch).
+            const last = cur[cur.length - 1];
+            const next = last && last.x === point.x ? [...cur.slice(0, -1), point] : [...cur, point];
+            return { ...prev, [data.bench]: next.slice(-200) };
+          });
+        }
         // Progress lines flood the log; we still surface them but the panel
         // can hide them via its toolbar toggle.
         if (data?.phase === "loading") {
@@ -180,6 +202,29 @@ export function RunningPage() {
   const rate = elapsedMs > 0 ? totalCurrent / (elapsedMs / 1000) : 0;
   const etaMs =
     rate > 0 && totalTotal > totalCurrent ? ((totalTotal - totalCurrent) / rate) * 1000 : null;
+
+  // Build combined chart data: one row per x value, one column per bench.
+  // recharts plots multiple <Line dataKey={bench} /> against this shape; gaps
+  // are rendered as breaks in the line, so each bench appears independently.
+  const benchNames = useMemo(() => Object.keys(seriesByBench).sort(), [seriesByBench]);
+  const chartData = useMemo(() => {
+    const maxX = benchNames.reduce((acc, n) => {
+      const last = seriesByBench[n][seriesByBench[n].length - 1];
+      return last ? Math.max(acc, last.x) : acc;
+    }, 0);
+    if (maxX === 0) return [];
+    const rows: Array<Record<string, number>> = [];
+    for (let x = 1; x <= maxX; x++) {
+      const row: Record<string, number> = { x };
+      for (const n of benchNames) {
+        const point = seriesByBench[n].find((p) => p.x === x);
+        if (point) row[n] = point.acc;
+      }
+      rows.push(row);
+    }
+    return rows;
+  }, [benchNames, seriesByBench]);
+  const totalChartPoints = benchNames.reduce((acc, n) => acc + (seriesByBench[n]?.length ?? 0), 0);
 
   const cap = fmtCap(s.maxCostUsd);
   const capProgressPct =
@@ -324,18 +369,25 @@ export function RunningPage() {
             </div>
           </section>
 
-          {/* Running accuracy chart — only if we have data */}
-          {series.length > 1 && (
+          {/* Running accuracy chart — one line per benchmark. The shared
+              x-axis is "samples within the bench" so two benches running in
+              series both start at 1, plotted against their own line. */}
+          {totalChartPoints > 1 && (
             <section className="rounded-lg border border-border/60 surface-1">
               <header className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
                 <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
                 <h3 className="text-sm font-semibold">{t("run.running_accuracy")}</h3>
+                <span className="text-[0.65rem] text-muted-foreground">
+                  {t("run.per_bench", {
+                    defaultValue: "per benchmark · x = sample index",
+                  })}
+                </span>
               </header>
-              <div className="h-56 p-3">
+              <div className="h-64 p-3">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={series}>
+                  <LineChart data={chartData}>
                     <CartesianGrid strokeOpacity={0.08} />
-                    <XAxis dataKey="done" stroke="currentColor" fontSize={11} />
+                    <XAxis dataKey="x" stroke="currentColor" fontSize={11} />
                     <YAxis domain={[0, 1]} stroke="currentColor" fontSize={11} />
                     <Tooltip
                       contentStyle={{
@@ -343,14 +395,25 @@ export function RunningPage() {
                         border: "1px solid hsl(var(--border))",
                         borderRadius: "0.375rem",
                       }}
+                      formatter={(value: any) => (typeof value === "number" ? value.toFixed(3) : value)}
                     />
-                    <Line
-                      type="monotone"
-                      dataKey="acc"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2}
-                      dot={false}
+                    <Legend
+                      wrapperStyle={{ fontSize: 11 }}
+                      iconType="plainline"
+                      iconSize={14}
                     />
+                    {benchNames.map((name, i) => (
+                      <Line
+                        key={name}
+                        type="monotone"
+                        dataKey={name}
+                        stroke={BENCH_COLORS[i % BENCH_COLORS.length]}
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls
+                        isAnimationActive={false}
+                      />
+                    ))}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
