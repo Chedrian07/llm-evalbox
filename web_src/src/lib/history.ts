@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-// Tiny IndexedDB helper for persisting completed run results in the browser.
-// We don't pull in idb-keyval — a few raw IDBOpenDBRequest calls are enough.
+// IndexedDB now serves as an OFFLINE FALLBACK only — the server's
+// `runs.sqlite` is the canonical history. saveHistory() writes to
+// IndexedDB only when the server fetch fails (so users on a flaky link
+// or in private mode still get something), and listMergedHistory()
+// prefers server results, layering local entries on top only for runs
+// the server doesn't know about (e.g. created on another machine).
+//
+// The schema and DB version stay the same so existing IndexedDB stores
+// from earlier versions still open without an upgrade event.
 
 import { api, type RunResult } from "./api";
 
@@ -35,15 +42,38 @@ function open(): Promise<IDBDatabase> {
   });
 }
 
+/**
+ * Write a run to IndexedDB only if the server doesn't already know about
+ * it (or the GET round-trip fails — typically offline). We attempt an
+ * `api.getHistory(run_id)` first; if the server responds 200, the run is
+ * canonically stored server-side and we don't need a local copy. Any
+ * non-200 (404, 5xx, network error) falls through to IndexedDB so users
+ * never lose data because the network blipped.
+ */
 export async function saveHistory(entry: HistoryEntry): Promise<void> {
-  const db = await open();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.objectStore(STORE).put(entry);
-  });
-  db.close();
+  let serverHasIt = false;
+  try {
+    const detail = await api.getHistory(entry.run_id);
+    serverHasIt = !!detail?.run_id;
+  } catch {
+    serverHasIt = false;
+  }
+  if (serverHasIt) return;
+
+  try {
+    const db = await open();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.objectStore(STORE).put(entry);
+    });
+    db.close();
+  } catch {
+    // IndexedDB unavailable (private mode, quota) — degrade silently.
+    // The user still has the run-dir result.json on disk if CLI; the
+    // Web UI Results page just won't list it after refresh.
+  }
 }
 
 export async function listHistory(): Promise<HistoryEntry[]> {
@@ -102,17 +132,30 @@ export async function listServerHistory(limit = 100): Promise<HistoryEntry[]> {
   });
 }
 
+/**
+ * Server is the source of truth. IndexedDB layers on top only for
+ * runs the server doesn't have (offline mode or runs created on a
+ * different machine that pushed to local but never reached this
+ * server). When the server responds we don't drop those local-only
+ * entries — they're still the user's, and a server they happen to be
+ * connected to right now isn't authoritative for runs they made
+ * elsewhere.
+ */
 export async function listMergedHistory(limit = 100): Promise<HistoryEntry[]> {
   const [server, local] = await Promise.all([
-    listServerHistory(limit).catch(() => []),
-    listHistory().catch(() => []),
+    listServerHistory(limit).catch(() => [] as HistoryEntry[]),
+    listHistory().catch(() => [] as HistoryEntry[]),
   ]);
   const byId = new Map<string, HistoryEntry>();
-  for (const entry of local) {
-    byId.set(entry.run_id, { ...entry, source: entry.source ?? "local" });
-  }
+  // Server first — its rows carry tags / notes / starred from SQLite.
   for (const entry of server) {
     byId.set(entry.run_id, entry);
+  }
+  // Local entries fill the gaps but never overwrite a server row.
+  for (const entry of local) {
+    if (!byId.has(entry.run_id)) {
+      byId.set(entry.run_id, { ...entry, source: entry.source ?? "local" });
+    }
   }
   return Array.from(byId.values())
     .sort((a, b) => b.saved_at - a.saved_at)
