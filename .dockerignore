@@ -1,0 +1,65 @@
+# Keep the build context small + reproducible. Anything not in this
+# list is a .gitignore-tracked artifact or completely irrelevant to
+# the runtime image.
+
+# Local state / results
+data/
+evalbox-runs/
+*.sqlite
+*.sqlite-*
+.cache/
+.evalbox/
+
+# Python tooling
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Node / SPA build context — Dockerfile only needs `web_src/` source +
+# we prebuild dist in stage 1. node_modules / dist on host are huge
+# and would invalidate the cache on every install.
+**/node_modules/
+web_src/dist/
+web_src/.turbo/
+web_src/.vite/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Repo state
+.git/
+.github/
+.gitignore
+
+# Internal docs / scratch
+plans/
+omlx/
+e2e/
+docs/
+PLAN.md
+CLAUDE.md
+
+# Secrets / examples should NOT be baked in (use --env-file or
+# docker-compose env_file).
+.env
+.env.*
+!.env.example
+*.env.local
+
+# Logs
+*.log
+*.pid
+*.seed

@@ -1,0 +1,48 @@
+# llm-evalbox single-container compose file.
+#
+# Quick start:
+#   cp .env.example .env  # set EVALBOX_BASE_URL / EVALBOX_MODEL / OPENAI_API_KEY
+#   docker compose up -d --build
+#   open http://127.0.0.1:8765
+#
+# What this file does:
+#   - Builds the multi-stage image from ./Dockerfile.
+#   - Loads the project-local `.env` so the SPA hydrates with the user's
+#     base_url / model defaults (and the localhost rewrite kicks in for
+#     hosts that point at vLLM/Ollama on the host machine).
+#   - extra_hosts maps host.docker.internal to the host on Linux too —
+#     Docker Desktop on Mac/Windows already exposes this name, but Linux
+#     containers need the explicit `host-gateway` entry. With this in
+#     place a `.env` of `EVALBOX_BASE_URL=http://localhost:8000/v1`
+#     works on every platform.
+#   - State volumes:
+#       ./data           → /data (cache + config + runs.sqlite)
+#       ./evalbox-runs   → /app/evalbox-runs (per-run JSON output)
+#   - 127.0.0.1 binding by default: nothing on your LAN can hit the API.
+
+services:
+  evalbox:
+    build: .
+    image: llm-evalbox:dev
+    container_name: llm-evalbox
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    ports:
+      - "127.0.0.1:8765:8765"
+
+    volumes:
+      - ./data:/data
+      - ./evalbox-runs:/app/evalbox-runs
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
