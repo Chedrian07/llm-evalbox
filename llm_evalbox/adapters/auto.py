@@ -17,6 +17,7 @@ import logging
 from llm_evalbox.adapters.base import ChatAdapter
 from llm_evalbox.adapters.chat_completions import ChatCompletionsAdapter
 from llm_evalbox.adapters.responses import ResponsesAdapter
+from llm_evalbox.adapters.url_rewrite import rewrite_localhost
 from llm_evalbox.core.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
@@ -37,16 +38,21 @@ def resolve_adapter(
       - `responses` → ResponsesAdapter (`/v1/responses`)
     """
     k = (kind or "auto").lower()
+    # Docker-aware: when running inside a container, rewrite localhost-like
+    # hosts to host.docker.internal so the user's `.env` / form input keeps
+    # working without per-environment edits. The user's input is preserved
+    # in stores/UI — only the URL handed to httpx is touched.
+    effective_url, _ = rewrite_localhost(base_url)
     if k in ("auto", "chat", "chat_completions"):
         return ChatCompletionsAdapter(
-            base_url=base_url,
+            base_url=effective_url,
             api_key=api_key,
             extra_headers=extra_headers,
             timeout=timeout,
         )
     if k == "responses":
         return ResponsesAdapter(
-            base_url=base_url,
+            base_url=effective_url,
             api_key=api_key,
             extra_headers=extra_headers,
             timeout=timeout,
