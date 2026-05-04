@@ -166,6 +166,29 @@ export interface HistoryMetaPatch {
   starred?: boolean;
 }
 
+export interface ConnectionProfile {
+  name: string;
+  base_url: string | null;
+  model: string | null;
+  adapter: string | null;
+  api_key_env: string | null;
+  extra_headers: Record<string, string>;
+  sampling: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  last_used_at: string | null;
+}
+
+export interface ProfileUpsert {
+  name: string;
+  base_url?: string | null;
+  model?: string | null;
+  adapter?: string | null;
+  api_key_env?: string | null;
+  extra_headers?: Record<string, string>;
+  sampling?: Record<string, unknown>;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, {
     headers: { "Content-Type": "application/json", ...init?.headers },
@@ -263,6 +286,20 @@ export const api = {
     request<{ updated: boolean }>(`/api/history/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
+    }),
+  listProfiles: () => request<ConnectionProfile[]>("/api/profiles"),
+  saveProfile: (profile: ProfileUpsert) =>
+    request<ConnectionProfile>("/api/profiles", {
+      method: "POST",
+      body: JSON.stringify(profile),
+    }),
+  deleteProfile: (name: string) =>
+    request<{ deleted: boolean }>(`/api/profiles/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
+  useProfile: (name: string) =>
+    request<ConnectionProfile>(`/api/profiles/${encodeURIComponent(name)}/use`, {
+      method: "POST",
     }),
   deleteHistory: (id: string) =>
     request<{ status: string }>(`/api/history/${encodeURIComponent(id)}`, { method: "DELETE" }),

@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ProfileSelector } from "@/components/profile-selector";
 import { api } from "@/lib/api";
 import type { ModelInfo } from "@/lib/api";
 import { useApp } from "@/lib/store";
@@ -105,10 +106,13 @@ export function ConnectionCard({ compact = false }: { compact?: boolean }) {
             </Badge>
           )}
         </div>
-        <Button onClick={test} size="sm" disabled={busy || !s.baseUrl || !s.model} className="h-8">
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
-          {busy ? t("connection.testing") : t("connection.test")}
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <ProfileSelector />
+          <Button onClick={test} size="sm" disabled={busy || !s.baseUrl || !s.model} className="h-8">
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
+            {busy ? t("connection.testing") : t("connection.test")}
+          </Button>
+        </div>
       </header>
 
       <div className="grid gap-3 p-4 lg:grid-cols-2">

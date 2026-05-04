@@ -55,13 +55,41 @@ class Profile:
 
 
 def load_profile(name: str | None) -> Profile | None:
-    """Return the named profile, or None when no profiles file exists."""
+    """Return the named profile.
+
+    Lookup order:
+      1. SQLite store (`runs.sqlite` → profiles table) — written by the
+         Web UI.
+      2. TOML file at `~/.config/llm-evalbox/profiles.toml` — legacy /
+         CLI users edit this directly.
+
+    Returns None when `name` is None. Raises ConfigError when a name
+    was requested but neither store has it (so the CLI can give a
+    pointed error message instead of silently using defaults).
+    """
     if name is None:
         return None
+
+    # SQLite first — Web edits and the TOML one-shot import both land here.
+    from llm_evalbox.cache import profiles_db
+    row = profiles_db.load_profile_db(name)
+    if row is not None:
+        return Profile(
+            name=row["name"],
+            adapter=str(row.get("adapter") or "auto"),
+            base_url=row.get("base_url"),
+            api_key_env=row.get("api_key_env"),
+            extra_headers=dict(row.get("extra_headers") or {}),
+            sampling=dict(row.get("sampling") or {}),
+        )
+
+    # TOML fallback — only used when the SQLite store has no entry AND
+    # the import-on-first-access has somehow been skipped (tests).
     path = profile_path()
     if not path.exists():
         raise ConfigError(
-            f"profile {name!r} requested but {path} does not exist."
+            f"profile {name!r} requested but {path} does not exist "
+            f"(and no SQLite entry either)."
         )
     with open(path, "rb") as f:
         data = tomllib.load(f)

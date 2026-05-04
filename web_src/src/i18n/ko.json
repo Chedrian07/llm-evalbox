@@ -186,6 +186,16 @@
     "starred_only": "별표만",
     "no_matches": "필터에 맞는 항목 없음"
   },
+  "profile": {
+    "title": "프로필",
+    "save": "프로필로 저장…",
+    "save_title": "현재 연결을 프로필로 저장",
+    "save_help": "base_url · model · adapter · api_key_env 만 저장. API 키 값 자체는 저장 안 됨.",
+    "name_placeholder": "프로필 이름",
+    "loading": "불러오는 중…",
+    "empty": "저장된 프로필 없음.",
+    "delete": "삭제"
+  },
   "error": {
     "title": "오류",
     "retry": "재시도"

@@ -186,6 +186,16 @@
     "starred_only": "Starred only",
     "no_matches": "no matches"
   },
+  "profile": {
+    "title": "Profile",
+    "save": "Save as profile…",
+    "save_title": "Save current connection as profile",
+    "save_help": "Stores base_url · model · adapter · api_key_env. The API key value itself is never persisted.",
+    "name_placeholder": "profile name",
+    "loading": "Loading…",
+    "empty": "No saved profiles yet.",
+    "delete": "Delete"
+  },
   "error": {
     "title": "Error",
     "retry": "Retry"
