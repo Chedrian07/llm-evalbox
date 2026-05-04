@@ -84,13 +84,38 @@ def build_app(*, bind_token: str | None = None) -> FastAPI:
     if bind_token:
         @app.middleware("http")
         async def _check_token(request, call_next):
-            # Allow GET on root and health for sanity checks; require token elsewhere.
-            if request.url.path.startswith("/api/"):
-                supplied = request.headers.get("x-evalbox-token", "")
+            # The SPA-running browser at 127.0.0.1 doesn't know the token.
+            # We bridge that gap by setting `evalbox_token` as an HttpOnly
+            # cookie on the SPA HTML response — every subsequent fetch()
+            # sends it automatically (same-origin) and the API check
+            # passes. A direct script hitting /api/* without going through
+            # `/` first still needs the X-Evalbox-Token header (or cookie),
+            # so the gate's threat model (random LAN scanners can't poke
+            # the API) remains intact.
+            path = request.url.path
+            is_api = path.startswith("/api/")
+            if is_api:
+                supplied = (
+                    request.headers.get("x-evalbox-token", "")
+                    or request.cookies.get("evalbox_token", "")
+                )
                 if supplied != bind_token:
                     from fastapi.responses import JSONResponse
                     return JSONResponse(status_code=401, content={"detail": "missing or bad X-Evalbox-Token"})
-            return await call_next(request)
+            response = await call_next(request)
+            # Seed the cookie on every non-API response so the SPA shell
+            # picks it up on first load. `samesite=strict` keeps it out
+            # of cross-origin requests; `httponly` keeps JS from reading
+            # it (which is fine — fetch() sends cookies regardless).
+            if not is_api:
+                response.set_cookie(
+                    "evalbox_token",
+                    bind_token,
+                    httponly=True,
+                    samesite="strict",
+                    path="/",
+                )
+            return response
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
