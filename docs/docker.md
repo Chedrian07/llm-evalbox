@@ -5,8 +5,23 @@
 ```bash
 cp .env.example .env
 # fill in EVALBOX_BASE_URL / EVALBOX_MODEL / OPENAI_API_KEY (or whichever key env)
+make up           # build + start + auto-open the browser with the bind token
+```
+
+`make up` is the no-friction path:
+
+1. `docker compose up -d --build`
+2. waits for `/api/health` to come up
+3. reads the bind token from the container and opens
+   `http://127.0.0.1:8765/?evalbox_token=...` in your default browser, so
+   the SPA gets its HttpOnly cookie without any copy/paste.
+
+If you'd rather drive compose by hand:
+
+```bash
 docker compose up -d --build
-open http://127.0.0.1:8765
+# then either visit the printed bootstrap URL once,
+# or `make open` to do it for you.
 ```
 
 The first run builds the image (multi-stage: Node 20 → Python 3.12-slim,
@@ -49,25 +64,34 @@ To opt out, set `EVALBOX_LOCALHOST_REWRITE=off` in `.env`.
 
 Inside the container the server binds `0.0.0.0:8765`. The `--bind-token`
 guard (cli.py:659) refuses to start without a token, so the entrypoint
-generates a 32-char random hex token if you didn't supply one:
+falls back through three sources, in order:
+
+1. `EVALBOX_WEB_BIND_TOKEN` from env (`.env` / `-e`) — used as-is.
+2. `/data/.bind_token` from a previous run — reused so the token is
+   stable across `docker compose restart` and the cookie keeps working.
+3. Fresh random 32-char hex — generated and persisted to (2).
+
+The first stdout line tells you which path was taken:
 
 ```text
-evalbox: bind-token=03f4…
+evalbox: bind-token=03f4… (reused)
 ```
 
-Grab it from `docker logs llm-evalbox` and pass it as the
-`x-evalbox-token` header on protected `/api/*` calls. `GET /api/health`
-stays public so Docker can run its healthcheck.
+Pass the token as the `x-evalbox-token` header on protected `/api/*`
+calls. `GET /api/health` stays public so Docker can run its healthcheck.
 
-For browser use, open the printed `browser-bootstrap=...` URL once. It
-sets an HttpOnly same-origin cookie and then redirects back to `/`, so
-the SPA's fetch and EventSource calls authenticate without exposing the
-token to JavaScript. A plain `GET /` does not mint a cookie; this keeps a
-host-network exposure from becoming "visit the homepage to unlock the
-API".
+For browser use, open the printed `browser-bootstrap=...` URL once (or
+just run `make open`). It sets an HttpOnly same-origin cookie and then
+redirects back to `/`, so the SPA's fetch and EventSource calls
+authenticate without exposing the token to JavaScript. A plain `GET /`
+does not mint a cookie; this keeps a host-network exposure from becoming
+"visit the homepage to unlock the API".
 
-To use a fixed token instead, set `EVALBOX_WEB_BIND_TOKEN=...` in
-`.env`.
+To pin a token of your choice (e.g. for shared secrets across multiple
+environments), set `EVALBOX_WEB_BIND_TOKEN=...` in `.env`. That overrides
+both the persisted file and the random generator. To rotate the
+auto-generated token, delete `./data/.bind_token` and restart the
+container.
 
 ## Sandbox tiers in a container
 

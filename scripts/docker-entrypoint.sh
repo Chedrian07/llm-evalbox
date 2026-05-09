@@ -15,21 +15,42 @@
 # the printed bootstrap URL once to exchange the token for an HttpOnly cookie.
 set -e
 
-# Token gate. Only generate when:
-#   - no token already in env, AND
-#   - we're binding non-loopback (the only case the gate applies to).
+# Token gate. Only kicks in when binding non-loopback. Three sources:
+#   1. env (user-supplied via .env / -e) — used as-is, never persisted.
+#   2. persisted file at $EVALBOX_DATA_DIR/.bind_token — survives restarts
+#      so the host-side `Makefile` can grep one stable token and the
+#      browser cookie issued in earlier sessions stays valid.
+#   3. fresh generation — written to (2) so the next restart reuses it.
 host="${EVALBOX_WEB_HOST:-127.0.0.1}"
 case "$host" in
     127.0.0.1|::1|localhost) ;;
     *)
-        token="$EVALBOX_WEB_BIND_TOKEN"
-        if [ -z "$EVALBOX_WEB_BIND_TOKEN" ]; then
+        data_dir="${EVALBOX_DATA_DIR:-/data}"
+        token_file="$data_dir/.bind_token"
+
+        if [ -n "$EVALBOX_WEB_BIND_TOKEN" ]; then
+            token="$EVALBOX_WEB_BIND_TOKEN"
+            token_source="env"
+        elif [ -s "$token_file" ]; then
+            token="$(cat "$token_file")"
+            export EVALBOX_WEB_BIND_TOKEN="$token"
+            token_source="reused"
+        else
             # `od -An -tx1 -N16 /dev/urandom` would also work but tr is
             # ubiquitous on slim images and produces a more compact form.
             token="$(tr -dc 'a-f0-9' < /dev/urandom | head -c 32)"
             export EVALBOX_WEB_BIND_TOKEN="$token"
-            printf 'evalbox: bind-token=%s\n' "$token"
+            token_source="generated"
+            # Best-effort persist. If /data isn't writable we still serve;
+            # the user just lands on the previous behaviour (fresh token
+            # per restart) instead of failing the boot.
+            if mkdir -p "$data_dir" 2>/dev/null \
+               && printf '%s' "$token" > "$token_file" 2>/dev/null; then
+                chmod 600 "$token_file" 2>/dev/null || true
+            fi
         fi
+
+        printf 'evalbox: bind-token=%s (%s)\n' "$token" "$token_source"
         printf 'evalbox: include this as x-evalbox-token header on protected /api/* calls.\n'
         printf 'evalbox: browser-bootstrap=http://127.0.0.1:%s/?evalbox_token=%s\n' "${EVALBOX_WEB_PORT:-8765}" "$token"
         ;;
