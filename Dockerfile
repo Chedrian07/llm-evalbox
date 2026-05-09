@@ -28,8 +28,12 @@ FROM node:20-alpine AS frontend
 
 WORKDIR /web
 
-# Enable corepack so pnpm matches the project's lockfile resolver.
-RUN corepack enable
+# Enable corepack and pin pnpm to a version that matches lockfileVersion 9.0
+# and runs on Node 20. Without the pin, corepack pulls "latest" which is
+# now pnpm 11.x — that requires Node 22+ and crashes with
+# ERR_UNKNOWN_BUILTIN_MODULE on this base image.
+RUN corepack enable \
+ && corepack prepare pnpm@9.15.0 --activate
 
 # Copy only the manifest first to maximise the layer cache hit when
 # source files change but deps don't.
