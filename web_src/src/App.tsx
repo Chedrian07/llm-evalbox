@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { LocaleToggle } from "@/components/locale-toggle";
@@ -13,6 +13,7 @@ export function App() {
   const stage = useApp((s) => s.stage);
   const hydrated = useApp((s) => s.hydrated);
   const hydrateFromServer = useApp((s) => s.hydrateFromServer);
+  const [authBlocked, setAuthBlocked] = useState(false);
 
   // Pull defaults from /api/defaults once at mount so values surfaced by
   // `evalbox web` (with .env loaded) populate the connection / options
@@ -21,7 +22,12 @@ export function App() {
   // user edits.
   useEffect(() => {
     if (hydrated) return;
-    api.defaults().then(hydrateFromServer).catch(() => {
+    api.defaults().then((defaults) => {
+      setAuthBlocked(false);
+      hydrateFromServer(defaults);
+    }).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err ?? "");
+      setAuthBlocked(message.includes("X-Evalbox-Token") || message.includes("HTTP 401"));
       // Backend down or older build — keep the static defaults.
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -49,6 +55,17 @@ export function App() {
           </div>
         </div>
       </header>
+      {authBlocked && (
+        <div className="border-b border-destructive/30 bg-destructive/10">
+          <div className="container py-3 text-sm">
+            <p className="font-medium text-destructive">{t("auth.bind_token_title")}</p>
+            <p className="mt-1 text-muted-foreground">
+              {t("auth.bind_token_help_prefix")} <code className="rounded bg-background/70 px-1 py-0.5">make open</code>{" "}
+              {t("auth.bind_token_help_suffix")}
+            </p>
+          </div>
+        </div>
+      )}
       <main className="container py-4 md:py-5">
         {stage === "setup" && <SetupPage />}
         {stage === "running" && <RunningPage />}

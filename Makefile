@@ -45,8 +45,13 @@ up:
 
 open:
 	@token="$$(docker exec $(CONTAINER) cat /data/.bind_token 2>/dev/null)"; \
+	if [ -z "$$token" ] && [ -f .env ]; then \
+		token="$$(sed -n 's/^[[:space:]]*EVALBOX_WEB_BIND_TOKEN[[:space:]]*=[[:space:]]*//p' .env | tail -n 1 | tr -d '\r')"; \
+		token="$${token#\"}"; token="$${token%\"}"; \
+		token="$${token#\'}"; token="$${token%\'}"; \
+	fi; \
 	if [ -z "$$token" ]; then \
-		printf 'evalbox: no /data/.bind_token (loopback bind, env-supplied token, or container not ready)\n'; \
+		printf 'evalbox: no bind token found (/data/.bind_token or EVALBOX_WEB_BIND_TOKEN in .env)\n'; \
 		printf 'evalbox: try `make logs` and grep bind-token=\n'; \
 		exit 0; \
 	fi; \

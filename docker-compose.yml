@@ -2,8 +2,11 @@
 #
 # Quick start:
 #   cp .env.example .env  # set EVALBOX_BASE_URL / EVALBOX_MODEL / OPENAI_API_KEY
-#   docker compose up -d --build
-#   open http://127.0.0.1:8765
+#   make up                # opens the bind-token bootstrap URL for you
+#
+# If you start with `docker compose up -d --build` directly, run `make open`
+# once afterwards. The container binds 0.0.0.0 internally, so protected /api/*
+# calls need the evalbox_token cookie even though the host port is loopback-only.
 #
 # What this file does:
 #   - Builds the multi-stage image from ./Dockerfile.

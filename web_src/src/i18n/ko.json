@@ -7,6 +7,11 @@
     "locale": "언어",
     "theme": "테마"
   },
+  "auth": {
+    "bind_token_title": "웹 UI 인증 쿠키가 아직 설정되지 않았습니다.",
+    "bind_token_help_prefix": "Docker로 실행 중이면 한 번",
+    "bind_token_help_suffix": "을 실행하거나 컨테이너 로그의 browser-bootstrap URL로 접속한 뒤 이 페이지를 새로고침하세요."
+  },
   "stage": {
     "setup": "설정",
     "running": "실행 중",

@@ -92,6 +92,11 @@ options inputs from that endpoint, so anything you set in `.env`
 can show a "✓ $OPENAI_API_KEY" hint and let the backend resolve the key
 server-side per request.
 
+When running the Docker Compose setup, prefer `make up` or run `make open`
+after `docker compose up -d --build`. Compose serves the API through a
+bind-token guard; the bootstrap URL sets an HttpOnly `evalbox_token` cookie so
+the SPA can read `/api/defaults` and pick up `.env`.
+
 The web UI is a single-page app (Setup → Running → Results). All UI text is
 i18n'd (Korean default + English).
 

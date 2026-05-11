@@ -7,6 +7,11 @@
     "locale": "Language",
     "theme": "Theme"
   },
+  "auth": {
+    "bind_token_title": "The web UI is waiting for the evalbox auth cookie.",
+    "bind_token_help_prefix": "Open the Docker bootstrap URL once with",
+    "bind_token_help_suffix": "or use the browser-bootstrap URL printed in the container logs, then refresh this page."
+  },
   "stage": {
     "setup": "Setup",
     "running": "Running",

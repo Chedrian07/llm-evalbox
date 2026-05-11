@@ -93,7 +93,16 @@ def build_app(*, bind_token: str | None = None) -> FastAPI:
                 )
                 if supplied != bind_token:
                     from fastapi.responses import JSONResponse
-                    return JSONResponse(status_code=401, content={"detail": "missing or bad X-Evalbox-Token"})
+                    return JSONResponse(
+                        status_code=401,
+                        content={
+                            "detail": (
+                                "missing or bad X-Evalbox-Token; open the printed "
+                                "browser-bootstrap URL once, or run `make open`, "
+                                "so the evalbox_token cookie is set"
+                            )
+                        },
+                    )
 
             bootstrap_token = (
                 request.query_params.get("evalbox_token")
