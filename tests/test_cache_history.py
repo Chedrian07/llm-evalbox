@@ -35,7 +35,7 @@ def _payload(run_id: str, model: str, acc: float = 0.85, cost: float | None = 0.
              "cost_usd_estimated": cost, "duration_s": 1, "thinking_used": False,
              "denominator_policy": "lenient", "category_scores": {},
              "error_breakdown": {"ok": 10}, "latency_ms": {"p50": 100, "p95": 200},
-             "accuracy_ci95": [0.6, 0.95], "cache_hits": 0},
+             "accuracy_ci95": [0.6, 0.95]},
         ],
         "totals": {
             "accuracy_macro": acc,

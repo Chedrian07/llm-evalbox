@@ -8,9 +8,12 @@ import pytest
 from llm_evalbox.core.exceptions import SandboxError
 from llm_evalbox.eval._sandbox import (
     accept_code_exec,
+    require_accepted,
+    reset_code_exec_accepted_for_context,
     resolve_tier,
     run_python_with_check_tiered,
     run_python_with_stdin_tiered,
+    set_code_exec_accepted_for_context,
 )
 
 
@@ -22,6 +25,17 @@ def _accept():
 def test_resolve_tier_default(monkeypatch):
     monkeypatch.delenv("EVALBOX_SANDBOX", raising=False)
     assert resolve_tier() == "subprocess"
+
+
+def test_context_code_exec_consent_overrides_process_accept():
+    token = set_code_exec_accepted_for_context(False)
+    try:
+        with pytest.raises(SandboxError):
+            require_accepted("mbpp")
+    finally:
+        reset_code_exec_accepted_for_context(token)
+
+    require_accepted("mbpp")
 
 
 def test_resolve_tier_explicit(monkeypatch):

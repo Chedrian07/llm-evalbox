@@ -30,7 +30,6 @@ test("setup → run → results renders the matrix", async ({ page }) => {
       cost_usd_estimated: 0.001,
       thinking_used: false,
       denominator_policy: "lenient",
-      cache_hits: 0,
     }],
     totals: {
       accuracy_macro: 0.5,
@@ -69,7 +68,6 @@ test("setup → run → results renders the matrix", async ({ page }) => {
         tpm: null,
         max_cost_usd: null,
         accept_code_exec: false,
-        no_cache: false,
         strict_failures: false,
         no_thinking_rerun: false,
         prompt_cache_aware: false,
@@ -141,6 +139,13 @@ test("setup → run → results renders the matrix", async ({ page }) => {
     });
   });
   await page.route("**/api/runs", (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([]),
+      });
+    }
     if (route.request().method() !== "POST") return route.fallback();
     return route.fulfill({
       status: 200,

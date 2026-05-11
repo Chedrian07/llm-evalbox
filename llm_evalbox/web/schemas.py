@@ -60,8 +60,8 @@ class BenchmarkInfo(BaseModel):
 class PricingEstimateRequest(BaseModel):
     model: str
     benchmarks: list[str]
-    samples: int = 200
-    concurrency: int = 8
+    samples: int = Field(200, ge=0)
+    concurrency: int = Field(8, ge=1)
     thinking: Literal["auto", "on", "off"] = "auto"
 
 
@@ -75,15 +75,16 @@ class PricingEstimateResponse(BaseModel):
 
 class RunCreateRequest(BaseModel):
     connection: ConnectionRequest
-    benches: list[str]
-    samples: int = 200
-    concurrency: int = 8
+    benches: list[str] = Field(..., min_length=1)
+    samples: int = Field(200, ge=0)
+    concurrency: int = Field(8, ge=1)
+    rpm: int | None = Field(None, ge=1)
+    tpm: int | None = Field(None, ge=1)
     thinking: Literal["auto", "on", "off"] = "auto"
     no_thinking_rerun: bool = False
     prompt_cache_aware: bool = False
     accept_code_exec: bool = False
     strict_failures: bool = False
-    no_cache: bool = False
     max_cost_usd: float | None = None
     sampling: dict[str, Any] = Field(default_factory=dict)
     drop_params: list[str] = Field(default_factory=list)

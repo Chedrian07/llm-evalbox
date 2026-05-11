@@ -9,6 +9,7 @@ which calls `accept_code_exec()` to flip the in-process flag.
 from __future__ import annotations
 
 import os
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 
 from llm_evalbox.core.exceptions import SandboxError
@@ -56,6 +57,10 @@ def resolve_tier(explicit: str | None = None) -> str:
 
 
 _PROCESS_ACCEPT = False
+_CONTEXT_ACCEPT: ContextVar[bool | None] = ContextVar(
+    "evalbox_code_exec_accepted",
+    default=None,
+)
 
 
 def accept_code_exec() -> None:
@@ -64,7 +69,24 @@ def accept_code_exec() -> None:
     _PROCESS_ACCEPT = True
 
 
+def set_code_exec_accepted_for_context(accepted: bool) -> Token[bool | None]:
+    """Set code-exec consent for the current async context.
+
+    The CLI intentionally uses process-wide consent because it is a single
+    foreground command. The web server handles independent runs in one process,
+    so each request needs its own consent bit.
+    """
+    return _CONTEXT_ACCEPT.set(accepted)
+
+
+def reset_code_exec_accepted_for_context(token: Token[bool | None]) -> None:
+    _CONTEXT_ACCEPT.reset(token)
+
+
 def is_code_exec_accepted() -> bool:
+    scoped = _CONTEXT_ACCEPT.get()
+    if scoped is not None:
+        return scoped
     if _PROCESS_ACCEPT:
         return True
     return os.environ.get("EVALBOX_ACCEPT_CODE_EXEC") == "1"

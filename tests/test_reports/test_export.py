@@ -39,7 +39,6 @@ def _payload(model: str = "fake-model", acc: float = 0.85) -> dict:
                 "duration_s": 60.0,
                 "thinking_used": False,
                 "denominator_policy": "lenient",
-                "cache_hits": 0,
             }
         ],
         "totals": {

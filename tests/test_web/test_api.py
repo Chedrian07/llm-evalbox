@@ -204,7 +204,6 @@ async def test_runs_lifecycle():
             "samples": 3,
             "concurrency": 2,
             "thinking": "off",
-            "no_cache": True,
         })
         assert r.status_code == 200
         rid = r.json()["run_id"]
@@ -220,11 +219,13 @@ async def test_runs_lifecycle():
         assert detail["status"] == "completed", detail
         assert detail["result"] is not None
         assert detail["result"]["benchmarks"][0]["name"] == "mmlu"
+        assert "cache_hits" not in detail["result"]["benchmarks"][0]
         assert detail["messages"]
         assert detail["result"]["messages"] == detail["messages"]
         assert detail["result"]["messages"][0]["role"] == "system"
         assert any(m["metadata"]["type"] == "progress" for m in detail["result"]["messages"])
         assert any(m["metadata"]["type"] == "done" for m in detail["result"]["messages"])
+        assert all("cache_hit" not in m["metadata"] for m in detail["result"]["messages"])
 
 
 @pytest.mark.asyncio
@@ -265,7 +266,6 @@ async def test_runs_prompt_cache_aware_reaches_benchmark():
             "concurrency": 1,
             "thinking": "off",
             "prompt_cache_aware": True,
-            "no_cache": True,
         })
         assert r.status_code == 200
         rid = r.json()["run_id"]
@@ -308,7 +308,6 @@ def test_runs_sse_events_streaming(client):
         "samples": 2,
         "concurrency": 2,
         "thinking": "off",
-        "no_cache": True,
     }).json()["run_id"]
 
     seen: list[str] = []
@@ -341,6 +340,37 @@ def test_unknown_bench_returns_400(client):
         "samples": 3,
     })
     assert r.status_code == 400
+
+
+def test_code_bench_requires_accept_code_exec(client):
+    r = client.post("/api/runs", json={
+        "connection": {
+            "base_url": "https://api.test/v1",
+            "model": "gpt-4o-mini",
+            "adapter": "chat_completions",
+            "api_key": "sk-x",
+        },
+        "benches": ["mbpp"],
+        "samples": 1,
+        "accept_code_exec": False,
+    })
+    assert r.status_code == 400
+    assert "accept_code_exec=true" in r.json()["detail"]
+
+
+def test_run_validation_rejects_zero_concurrency(client):
+    r = client.post("/api/runs", json={
+        "connection": {
+            "base_url": "https://api.test/v1",
+            "model": "gpt-4o-mini",
+            "adapter": "chat_completions",
+            "api_key": "sk-x",
+        },
+        "benches": ["mmlu"],
+        "samples": 1,
+        "concurrency": 0,
+    })
+    assert r.status_code == 422
 
 
 def test_bind_token_required():

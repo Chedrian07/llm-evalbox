@@ -37,7 +37,6 @@ export function SetupPage() {
         prompt_cache_aware: s.promptCacheAware,
         accept_code_exec: s.acceptCodeExec,
         strict_failures: s.strictFailures,
-        no_cache: s.noCache,
         max_cost_usd: s.maxCostUsd ?? null,
         sampling: s.reasoningEffort ? { reasoning_effort: s.reasoningEffort } : undefined,
         drop_params: dropParams,

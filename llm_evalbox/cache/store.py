@@ -5,8 +5,7 @@ Layout (default, single user):
 
     ~/.cache/llm-evalbox/
         datasets/                  # populated by eval/datasets.ensure_dataset
-        responses/                 # response cache (M2)
-        runs/                      # legacy/explicit run dumps (M2 resume)
+        runs/                      # legacy/explicit run dumps
         runs.sqlite                # persistent history (cache/history.py)
     ~/.config/llm-evalbox/
         profiles.toml              # legacy CLI profiles (config/profile.py)

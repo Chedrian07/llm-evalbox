@@ -8,6 +8,8 @@ import type {
   CapabilityInfo,
   ConnectionResponse,
   ModelInfo,
+  RunDetail,
+  RunMessage,
   RunResult,
   ServerDefaults,
 } from "./api";
@@ -77,8 +79,6 @@ interface AppState {
   setPromptCacheAware: (b: boolean) => void;
   reasoningEffort: string | null;
   setReasoningEffort: (s: string | null) => void;
-  noCache: boolean;
-  setNoCache: (b: boolean) => void;
   dropParams: string;
   setDropParams: (s: string) => void;
   maxCostUsd: number | null;
@@ -94,6 +94,8 @@ interface AppState {
   updateBenchProgress: (b: string, patch: Partial<BenchProgress>) => void;
   finalResult: RunResult | null;
   setFinalResult: (r: RunResult | null) => void;
+  restoreRunDetail: (detail: RunDetail) => void;
+  resumeActiveRun: () => Promise<boolean>;
 }
 
 // Module-level token so concurrent loadModels() calls cancel earlier in-flights.
@@ -109,6 +111,47 @@ const detectDefaultBaseUrl = (): string => {
   }
   return "https://api.openai.com/v1";
 };
+
+function progressFromMessages(messages: RunMessage[] | undefined): Record<string, BenchProgress> {
+  const out: Record<string, BenchProgress> = {};
+  for (const message of messages ?? []) {
+    const md = message.metadata ?? {};
+    const type = String(md.type ?? "");
+    const bench = typeof md.bench === "string" ? md.bench : "";
+    if (!bench) continue;
+    const prev = out[bench] ?? {
+      bench,
+      current: 0,
+      total: 0,
+      running_accuracy: 0,
+      thinking_used: false,
+      done: false,
+    };
+    if (type === "progress") {
+      out[bench] = {
+        ...prev,
+        current: typeof md.current === "number" ? md.current : prev.current,
+        total: typeof md.total === "number" ? md.total : prev.total,
+        running_accuracy:
+          typeof md.running_accuracy === "number" ? md.running_accuracy : prev.running_accuracy,
+        thinking_used:
+          typeof md.thinking_used === "boolean" ? md.thinking_used : prev.thinking_used,
+      };
+    } else if (type === "result") {
+      const result = md.data as BenchmarkResult | undefined;
+      out[bench] = {
+        ...prev,
+        current: result?.samples ?? prev.total ?? prev.current,
+        total: result?.samples ?? prev.total,
+        running_accuracy: result?.accuracy ?? prev.running_accuracy,
+        thinking_used: result?.thinking_used ?? prev.thinking_used,
+        done: true,
+        result,
+      };
+    }
+  }
+  return out;
+}
 
 export const useApp = create<AppState>((set, get) => ({
   baseUrl: detectDefaultBaseUrl(),
@@ -204,7 +247,6 @@ export const useApp = create<AppState>((set, get) => ({
         concurrency: d.concurrency ?? prev.concurrency,
         maxCostUsd: d.max_cost_usd ?? prev.maxCostUsd,
         acceptCodeExec: d.accept_code_exec ?? prev.acceptCodeExec,
-        noCache: d.no_cache ?? prev.noCache,
         strictFailures: d.strict_failures ?? prev.strictFailures,
         noThinkingRerun: d.no_thinking_rerun ?? prev.noThinkingRerun,
         promptCacheAware: d.prompt_cache_aware ?? prev.promptCacheAware,
@@ -224,9 +266,9 @@ export const useApp = create<AppState>((set, get) => ({
       return { selectedBenches: next };
     }),
   samples: 50,
-  setSamples: (n) => set({ samples: n }),
+  setSamples: (n) => set({ samples: Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0 }),
   concurrency: 8,
-  setConcurrency: (n) => set({ concurrency: n }),
+  setConcurrency: (n) => set({ concurrency: Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1 }),
   thinking: "auto",
   setThinking: (t) => set({ thinking: t }),
   acceptCodeExec: false,
@@ -239,8 +281,6 @@ export const useApp = create<AppState>((set, get) => ({
   setPromptCacheAware: (b) => set({ promptCacheAware: b }),
   reasoningEffort: null,
   setReasoningEffort: (s) => set({ reasoningEffort: s }),
-  noCache: false,
-  setNoCache: (b) => set({ noCache: b }),
   dropParams: "",
   setDropParams: (s) => set({ dropParams: s }),
   maxCostUsd: 5.0,
@@ -265,4 +305,32 @@ export const useApp = create<AppState>((set, get) => ({
     })),
   finalResult: null,
   setFinalResult: (r) => set({ finalResult: r }),
+  restoreRunDetail: (detail) => {
+    const result = detail.result
+      ? { ...detail.result, messages: detail.result.messages ?? detail.messages ?? [] }
+      : null;
+    const stage: Stage =
+      detail.status === "completed" && result
+        ? "results"
+        : detail.status === "queued" || detail.status === "running"
+          ? "running"
+          : result
+            ? "results"
+            : "setup";
+    set({
+      runId: detail.run_id,
+      stage,
+      finalResult: result,
+      benchProgress: progressFromMessages(detail.messages),
+    });
+  },
+  resumeActiveRun: async () => {
+    const active = (await api.listRuns())
+      .filter((run) => run.status === "queued" || run.status === "running")
+      .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))[0];
+    if (!active) return false;
+    const detail = await api.getRun(active.run_id);
+    get().restoreRunDetail(detail);
+    return true;
+  },
 }));

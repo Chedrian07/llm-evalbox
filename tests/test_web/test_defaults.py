@@ -17,7 +17,7 @@ def _isolate(monkeypatch):
         "EVALBOX_BASE_URL", "EVALBOX_MODEL", "EVALBOX_ADAPTER", "EVALBOX_PROFILE",
         "EVALBOX_THINKING", "EVALBOX_REASONING_EFFORT",
         "EVALBOX_CONCURRENCY", "EVALBOX_RPM", "EVALBOX_TPM",
-        "EVALBOX_MAX_COST_USD", "EVALBOX_ACCEPT_CODE_EXEC", "EVALBOX_NO_CACHE",
+        "EVALBOX_MAX_COST_USD", "EVALBOX_ACCEPT_CODE_EXEC",
         "EVALBOX_STRICT_FAILURES", "EVALBOX_NO_THINKING_RERUN",
         "EVALBOX_PROMPT_CACHE_AWARE", "EVALBOX_DROP_PARAMS",
         "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TOGETHER_API_KEY",
@@ -46,7 +46,6 @@ def test_defaults_empty_env(client):
     assert body["api_keys"]["OPENROUTER_API_KEY"] is False
     # Boolean toggles default to False.
     assert body["accept_code_exec"] is False
-    assert body["no_cache"] is False
     assert body["strict_failures"] is False
     assert body["no_thinking_rerun"] is False
     assert body["prompt_cache_aware"] is False
@@ -75,14 +74,12 @@ def test_defaults_picks_up_extended_toggles(client, monkeypatch):
     monkeypatch.setenv("EVALBOX_STRICT_FAILURES", "1")
     monkeypatch.setenv("EVALBOX_NO_THINKING_RERUN", "true")
     monkeypatch.setenv("EVALBOX_PROMPT_CACHE_AWARE", "yes")
-    monkeypatch.setenv("EVALBOX_NO_CACHE", "on")
     monkeypatch.setenv("EVALBOX_PROFILE", "openrouter")
     body = client.get("/api/defaults").json()
     assert body["reasoning_effort"] == "high"
     assert body["strict_failures"] is True
     assert body["no_thinking_rerun"] is True
     assert body["prompt_cache_aware"] is True
-    assert body["no_cache"] is True
     assert body["profile"] == "openrouter"
 
 

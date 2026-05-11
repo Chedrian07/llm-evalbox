@@ -47,23 +47,25 @@ class RateLimiter:
         *,
         rpm: int | None = None,
         tpm: int | None = None,
-        concurrency: int = 8,
+        concurrency: int | None = 8,
     ):
         self.rpm = rpm
         self.tpm = tpm
         self._req_bucket = _Bucket(rpm, rpm / 60.0) if rpm else None
         self._tok_bucket = _Bucket(tpm, tpm / 60.0) if tpm else None
-        self._sem = asyncio.Semaphore(concurrency)
+        self._sem = asyncio.Semaphore(concurrency) if concurrency is not None else None
 
     async def acquire(self, est_tokens: int = 0) -> None:
-        await self._sem.acquire()
+        if self._sem is not None:
+            await self._sem.acquire()
         if self._req_bucket:
             await self._req_bucket.acquire(1)
         if self._tok_bucket and est_tokens > 0:
             await self._tok_bucket.acquire(est_tokens)
 
     def release(self) -> None:
-        self._sem.release()
+        if self._sem is not None:
+            self._sem.release()
 
     async def __aenter__(self) -> RateLimiter:
         await self.acquire()

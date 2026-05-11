@@ -32,7 +32,6 @@ def _question_to_dict(q: QuestionResult, *, include_raw: bool) -> dict[str, Any]
             "reasoning_tokens": q.usage.reasoning_tokens,
             "cached_prompt_tokens": q.usage.cached_prompt_tokens,
         },
-        "cache_hit": q.cache_hit,
     }
     if include_raw:
         d["prompt_text"] = q.prompt_text
@@ -65,7 +64,6 @@ def _benchmark_to_dict(b: BenchmarkResult, *, cost: float | None) -> dict[str, A
         "duration_s": b.duration_s,
         "thinking_used": b.thinking_used,
         "denominator_policy": b.denominator_policy,
-        "cache_hits": sum(1 for q in b.questions if q.cache_hit),
         "prompt_cache_hit_rate": round(rate, 4),
         "learned_drop_params": list(b.learned_drop_params),
     }

@@ -13,6 +13,7 @@ export function App() {
   const stage = useApp((s) => s.stage);
   const hydrated = useApp((s) => s.hydrated);
   const hydrateFromServer = useApp((s) => s.hydrateFromServer);
+  const resumeActiveRun = useApp((s) => s.resumeActiveRun);
   const [authBlocked, setAuthBlocked] = useState(false);
 
   // Pull defaults from /api/defaults once at mount so values surfaced by
@@ -25,6 +26,7 @@ export function App() {
     api.defaults().then((defaults) => {
       setAuthBlocked(false);
       hydrateFromServer(defaults);
+      resumeActiveRun().catch(() => {});
     }).catch((err) => {
       const message = err instanceof Error ? err.message : String(err ?? "");
       setAuthBlocked(message.includes("X-Evalbox-Token") || message.includes("HTTP 401"));

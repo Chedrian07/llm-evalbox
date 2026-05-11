@@ -22,9 +22,11 @@ from llm_evalbox.adapters.capabilities import (
     KNOWN_SAMPLING_KEYS,
     parse_unsupported_param_error,
 )
-from llm_evalbox.core.exceptions import AdapterError, BadRequestError
+from llm_evalbox.adapters.ratelimit import RateLimiter, estimate_tokens
+from llm_evalbox.core.exceptions import AdapterError, BadRequestError, ConfigError
 from llm_evalbox.core.messages import Message
 from llm_evalbox.core.request import ChatRequest, ChatResponse, Usage
+from llm_evalbox.core.thinking import thinking_token_budget
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,6 @@ class QuestionResult:
     reasoning_text: str = ""
     prompt_text: str = ""
     usage: Usage = field(default_factory=Usage)
-    cache_hit: bool = False
 
 
 @dataclass
@@ -199,8 +200,7 @@ class BaseBenchmark(ABC):
         thinking_mode: str,
         strict: bool,
         sem: asyncio.Semaphore,
-        cache: Any | None = None,
-        base_url: str = "",
+        limiter: RateLimiter | None = None,
         prompt_cache_aware: bool = False,
         runtime_drops: set[str] | None = None,
     ) -> tuple[int, dict, ChatResponse | None, str, str]:
@@ -229,37 +229,26 @@ class BaseBenchmark(ABC):
                 "drop_params": sorted(set(req.drop_params) | runtime_drops)
             })
         prompt_text = "\n".join(m.content for m in req.messages)
+        est_tokens = estimate_tokens(prompt_text) + thinking_token_budget(
+            base_max_tokens=req.max_tokens,
+            model=model,
+            thinking_on=thinking_mode == "on",
+        )
 
-        # Cache lookup (response cache, PLAN §13.3) — gated on caller passing
-        # a cache instance + a base_url (so the key reflects the gateway).
-        cache_k: str | None = None
-        if cache is not None and getattr(cache, "enabled", False):
-            from llm_evalbox.cache.responses import cache_key as _build_cache_key
-            sampling_dict = req.model_dump(
-                include={
-                    "temperature", "top_p", "top_k", "max_tokens",
-                    "presence_penalty", "frequency_penalty", "repetition_penalty",
-                    "reasoning_effort", "seed", "stop",
-                }
-            )
-            cache_k = _build_cache_key(
-                adapter_name=adapter.name,
-                base_url=base_url,
-                model=model,
-                messages=req.messages,
-                sampling=sampling_dict,
-                thinking_mode=thinking_mode,
-                benchmark_name=self.name,
-            )
-            hit = cache.get(cache_k)
-            if hit is not None:
-                return index, item, hit, "ok", prompt_text
+        async def _chat_with_limit(chat_req: ChatRequest) -> ChatResponse:
+            acquired = False
+            if limiter is not None:
+                await limiter.acquire(est_tokens)
+                acquired = True
+            try:
+                return await adapter.chat(chat_req)
+            finally:
+                if limiter is not None and acquired:
+                    limiter.release()
 
         async with sem:
             try:
-                resp = await adapter.chat(req)
-                if cache is not None and cache_k is not None:
-                    cache.put(cache_k, resp)
+                resp = await _chat_with_limit(req)
                 return index, item, resp, "ok", prompt_text
             except BadRequestError as e:
                 # Adaptive learning: the gateway told us a key it doesn't accept.
@@ -296,9 +285,7 @@ class BaseBenchmark(ABC):
                         "drop_params": sorted(set(req.drop_params) | (runtime_drops or set()))
                     })
                     try:
-                        resp = await adapter.chat(retried)
-                        if cache is not None and cache_k is not None:
-                            cache.put(cache_k, resp)
+                        resp = await _chat_with_limit(retried)
                         return index, item, resp, "ok", prompt_text
                     except AdapterError as e2:
                         logger.warning(
@@ -345,13 +332,13 @@ class BaseBenchmark(ABC):
         on_progress: Callable[[int, int, dict[str, Any]], Awaitable[None]] | None = None,
         on_item: Callable[[QuestionResult, int, int], Awaitable[None]] | None = None,
         concurrency: int = 8,
+        rpm: int | None = None,
+        tpm: int | None = None,
         sampling: SamplingOverrides | None = None,
         thinking: str = "auto",
         strict_deterministic: bool = False,
         strict_failures: bool = False,
         no_thinking_rerun: bool = False,
-        cache: Any | None = None,
-        base_url: str = "",
         prompt_cache_aware: bool = False,
         initial_drop_params: list[str] | None = None,
     ) -> BenchmarkResult:
@@ -372,11 +359,19 @@ class BaseBenchmark(ABC):
             `memory`), `generation_failed`, and `network`. Use this for
             academic comparison against published numbers.
         """
+        if concurrency < 1:
+            raise ConfigError("concurrency must be >= 1")
+        if rpm is not None and rpm < 1:
+            raise ConfigError("rpm must be >= 1")
+        if tpm is not None and tpm < 1:
+            raise ConfigError("tpm must be >= 1")
+
         if sampling is not None and sampling.has_any() and strict_deterministic:
             logger.warning("strict_deterministic=True overrides sampling overrides")
             sampling = None
 
         sem = asyncio.Semaphore(concurrency)
+        limiter = RateLimiter(rpm=rpm, tpm=tpm, concurrency=None) if rpm or tpm else None
         results_by_idx: dict[int, QuestionResult] = {}
         completed = 0
         total = len(items)
@@ -410,8 +405,7 @@ class BaseBenchmark(ABC):
                     thinking_mode=thinking_mode,
                     strict=strict_deterministic,
                     sem=sem,
-                    cache=cache,
-                    base_url=base_url,
+                    limiter=limiter,
                     prompt_cache_aware=prompt_cache_aware,
                     runtime_drops=runtime_drops,
                 )
@@ -442,8 +436,7 @@ class BaseBenchmark(ABC):
                                 thinking_mode=thinking_mode,
                                 strict=strict_deterministic,
                                 sem=sem,
-                                cache=cache,
-                                base_url=base_url,
+                                limiter=limiter,
                                 prompt_cache_aware=prompt_cache_aware,
                                 runtime_drops=runtime_drops,
                             )
@@ -484,7 +477,6 @@ class BaseBenchmark(ABC):
                         reasoning_text=resp.reasoning_text,
                         prompt_text=prompt_text,
                         usage=resp.usage,
-                        cache_hit=resp.cache_hit,
                     )
                 results_by_idx[idx] = qr
                 scored_in_batch.append((idx, qr))

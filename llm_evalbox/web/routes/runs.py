@@ -16,10 +16,12 @@ from llm_evalbox.adapters import resolve_adapter
 from llm_evalbox.adapters.auth import resolve_api_key
 from llm_evalbox.adapters.capabilities import capability_for
 from llm_evalbox.adapters.learned import lookup as lookup_learned
-from llm_evalbox.cache import ResponseCache
 from llm_evalbox.core.exceptions import EvalBoxError
 from llm_evalbox.eval import BENCHMARKS, get_benchmark
-from llm_evalbox.eval._sandbox.policy import accept_code_exec
+from llm_evalbox.eval._sandbox.policy import (
+    reset_code_exec_accepted_for_context,
+    set_code_exec_accepted_for_context,
+)
 from llm_evalbox.eval.base import SamplingOverrides
 from llm_evalbox.pricing import cost_for_usage
 from llm_evalbox.reports import serialize_result
@@ -35,6 +37,15 @@ async def create_run(req: RunCreateRequest) -> RunCreateResponse:
     unknown = [b for b in req.benches if b not in BENCHMARKS]
     if unknown:
         raise HTTPException(status_code=400, detail=f"unknown benchmark(s): {unknown}")
+    code_benches = [b for b in req.benches if get_benchmark(b).is_code_bench()]
+    if code_benches and not req.accept_code_exec:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "code benchmark(s) require accept_code_exec=true: "
+                + ", ".join(code_benches)
+            ),
+        )
 
     registry = get_registry()
     state = registry.create(req.model_dump())
@@ -95,18 +106,33 @@ async def run_events(run_id: str, request: Request) -> EventSourceResponse:
         raise HTTPException(status_code=404, detail="run not found")
 
     async def event_gen():
-        while True:
-            if await request.is_disconnected():
-                break
-            try:
-                event = await asyncio.wait_for(state.queue.get(), timeout=15.0)
-            except asyncio.TimeoutError:
-                # Heartbeat to keep proxies from killing the connection
-                yield {"event": "ping", "data": "{}"}
-                continue
-            if event.get("type") == "_close":
-                break
-            yield {"event": event.get("type", "message"), "data": json.dumps(event)}
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        async with state.events_lock:
+            replay = list(state.events)
+            state.subscribers.add(queue)
+        try:
+            for event in replay:
+                if await request.is_disconnected():
+                    return
+                if event.get("type") == "_close":
+                    return
+                yield {"event": event.get("type", "message"), "data": json.dumps(event)}
+
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    # Heartbeat to keep proxies from killing the connection
+                    yield {"event": "ping", "data": "{}"}
+                    continue
+                if event.get("type") == "_close":
+                    break
+                yield {"event": event.get("type", "message"), "data": json.dumps(event)}
+        finally:
+            async with state.events_lock:
+                state.subscribers.discard(queue)
 
     return EventSourceResponse(event_gen())
 
@@ -215,7 +241,15 @@ def _record_message(state: RunState, payload: dict[str, Any]) -> dict[str, Any]:
 
 async def _emit(state: RunState, payload: dict[str, Any], *, record: bool = True) -> None:
     event = _record_message(state, payload) if record else payload
-    await state.queue.put(event)
+    await _publish(state, event)
+
+
+async def _publish(state: RunState, event: dict[str, Any]) -> None:
+    async with state.events_lock:
+        state.events.append(event)
+        subscribers = list(state.subscribers)
+    for queue in subscribers:
+        queue.put_nowait(event)
 
 
 async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
@@ -228,8 +262,7 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
             f"{len(req.benches)} benchmark(s)"
         ),
     })
-    if req.accept_code_exec:
-        accept_code_exec()
+    code_exec_token = set_code_exec_accepted_for_context(req.accept_code_exec)
 
     try:
         api_key = req.connection.api_key or resolve_api_key(req.connection.api_key_env)
@@ -239,7 +272,6 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
             api_key=api_key,
             extra_headers=req.connection.extra_headers,
         )
-        cache = ResponseCache(enabled=not req.no_cache)
 
         sampling_obj: SamplingOverrides | None = None
         if req.sampling:
@@ -309,7 +341,6 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
                         "predicted": qr.predicted[:120],
                         "error_kind": qr.error_kind,
                         "latency_ms": qr.latency_ms,
-                        "cache_hit": qr.cache_hit,
                         "prompt_preview": _trim_text(qr.prompt_text, 600),
                         "text_preview": _trim_text(qr.raw_response, 600),
                         "reasoning_preview": _trim_text(qr.reasoning_text, 400),
@@ -326,12 +357,12 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
                     on_progress=_on_progress,
                     on_item=_on_item,
                     concurrency=req.concurrency,
+                    rpm=req.rpm,
+                    tpm=req.tpm,
                     sampling=sampling_obj,
                     thinking=req.thinking,
                     no_thinking_rerun=req.no_thinking_rerun,
                     strict_failures=req.strict_failures,
-                    cache=cache,
-                    base_url=req.connection.base_url,
                     prompt_cache_aware=req.prompt_cache_aware,
                     initial_drop_params=seeded_drops,
                 )
@@ -389,7 +420,8 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
             },
             sampling={
                 "concurrency": req.concurrency,
-                "no_cache": req.no_cache,
+                "rpm": req.rpm,
+                "tpm": req.tpm,
                 "prompt_cache_aware": req.prompt_cache_aware,
                 "no_thinking_rerun": req.no_thinking_rerun,
                 "max_cost_usd": req.max_cost_usd,
@@ -427,7 +459,7 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
         except Exception as e:  # pragma: no cover
             logger.warning("history upsert failed: %s", e)
 
-        await state.queue.put(done_event)
+        await _publish(state, done_event)
     except EvalBoxError as e:
         state.status = "failed"
         await _emit(state, {"type": "error", "message": str(e), "retryable": False})
@@ -436,6 +468,7 @@ async def _run_in_background(state: RunState, req: RunCreateRequest) -> None:
         state.status = "failed"
         await _emit(state, {"type": "error", "message": str(e), "retryable": False})
     finally:
+        reset_code_exec_accepted_for_context(code_exec_token)
         state.finished_at = datetime.now(timezone.utc).isoformat(
             timespec="seconds"
         ).replace("+00:00", "Z")

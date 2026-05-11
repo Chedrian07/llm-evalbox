@@ -148,7 +148,6 @@ export function RunningPage() {
           textPreview: data.text_preview,
           reasoningPreview: data.reasoning_preview,
           latencyMs: data.latency_ms,
-          cacheHit: !!data.cache_hit,
           tokens: data.tokens,
           text: "",
         });
@@ -517,4 +516,3 @@ function BenchProgressCard({
     </div>
   );
 }
-

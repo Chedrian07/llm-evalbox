@@ -81,15 +81,6 @@ export function OptionsCard() {
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={s.noCache}
-              onChange={(e) => s.setNoCache(e.target.checked)}
-              className="h-4 w-4 rounded border-input"
-            />
-            <span>{t("options.no_cache")}</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
               checked={s.promptCacheAware}
               onChange={(e) => s.setPromptCacheAware(e.target.checked)}
               className="h-4 w-4 rounded border-input"

@@ -35,8 +35,7 @@ Datasets are bundled (~62 MB, MIT/Apache/CC). No network fetch on first run.
 - Subprocess sandbox (tier 1) for code benchmarks with RLIMIT + timeout +
   env whitelist. Opt-in only.
 - Cost estimation per model with overrides; `--max-cost-usd` cap.
-- SHA256 response cache + `--resume`. `--thinking-compare` for off/on
-  side-by-side delta tables.
+- `--thinking-compare` for off/on side-by-side delta tables.
 
 ## Common commands
 
@@ -62,10 +61,8 @@ evalbox run --bench gsm8k --samples 30 --thinking-compare
 # academic mode (sandbox / network failures count toward the denominator)
 evalbox run --bench humaneval --samples 30 --accept-code-exec --strict-failures
 
-# resume an interrupted run (uses the response cache for the fast path)
+# write results to a specific directory
 evalbox run --bench mmlu --samples 200 --output-dir runs/x
-# ctrl-c
-evalbox run --bench mmlu --samples 200 --output-dir runs/x --resume
 ```
 
 Full option list: `evalbox run --help` (30+ flags). Gateway recipes for
@@ -98,7 +95,9 @@ bind-token guard; the bootstrap URL sets an HttpOnly `evalbox_token` cookie so
 the SPA can read `/api/defaults` and pick up `.env`.
 
 The web UI is a single-page app (Setup → Running → Results). All UI text is
-i18n'd (Korean default + English).
+i18n'd (Korean default + English). While the server process is alive, opening
+another browser or tab automatically reattaches to the newest queued/running
+run and replays the in-memory event stream.
 
 ## Output
 
@@ -110,9 +109,9 @@ evalbox-runs/evalbox-<UTC>--<model-slug>/
   result-off.json
 ```
 
-The same command run twice returns instantly the second time — the response
-cache lives at `~/.cache/llm-evalbox/responses/`. Disable with `--no-cache`
-or `EVALBOX_NO_CACHE=1`.
+Each run sends fresh model requests. `--resume` is disabled because the old
+resume path depended on the removed global response cache; durable per-question
+checkpoint resume is future work.
 
 ## License
 

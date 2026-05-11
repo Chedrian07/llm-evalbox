@@ -205,14 +205,12 @@ function SummaryCards({ r }: { r: RunResult }) {
   const tokens = totals.tokens ?? {};
   const benches = r.benchmarks ?? [];
   const sampleCount = benches.reduce((acc, b) => acc + (b.samples ?? 0), 0);
-  const cacheHits = benches.reduce((acc, b) => acc + (b.cache_hits ?? 0), 0);
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <SummaryMetric label={t("results.accuracy")} value={fmtAcc(totals.accuracy_macro)} detail={t("results.macro")} />
       <SummaryMetric label={t("results.cost")} value={fmtCost(totals.cost_usd_estimated)} detail={r.provider?.model ?? "?"} />
       <SummaryMetric label={t("results.samples")} value={fmtNum(sampleCount)} detail={`${benches.length} ${t("plan.benchmarks")}`} />
       <SummaryMetric label={t("results.tokens")} value={fmtNum((tokens.prompt ?? 0) + (tokens.completion ?? 0) + (tokens.reasoning ?? 0))} detail={`cached ${fmtNum(tokens.cached_prompt)}`} />
-      <SummaryMetric label={t("results.cache_hits")} value={fmtNum(cacheHits)} detail={r.sampling?.prompt_cache_aware ? t("options.prompt_cache_short") : t("results.response_cache")} />
     </div>
   );
 }

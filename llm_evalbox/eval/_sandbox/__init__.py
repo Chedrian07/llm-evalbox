@@ -7,7 +7,9 @@ from llm_evalbox.eval._sandbox.policy import (
     accept_code_exec,
     is_code_exec_accepted,
     require_accepted,
+    reset_code_exec_accepted_for_context,
     resolve_tier,
+    set_code_exec_accepted_for_context,
 )
 from llm_evalbox.eval._sandbox.runner import (
     SandboxResult,
@@ -64,9 +66,11 @@ __all__ = [
     "accept_code_exec",
     "is_code_exec_accepted",
     "require_accepted",
+    "reset_code_exec_accepted_for_context",
     "resolve_tier",
     "run_python_with_check",
     "run_python_with_check_tiered",
     "run_python_with_stdin",
     "run_python_with_stdin_tiered",
+    "set_code_exec_accepted_for_context",
 ]

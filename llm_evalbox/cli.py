@@ -79,6 +79,31 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _fail_usage(message: str) -> None:
+    console.print(f"[red]error:[/red] {message}")
+    raise typer.Exit(2)
+
+
+def _validate_run_inputs(
+    *,
+    samples: int,
+    concurrency: int,
+    rpm: int | None,
+    tpm: int | None,
+    thinking: str,
+) -> None:
+    if samples < 0:
+        _fail_usage("--samples must be >= 0")
+    if concurrency < 1:
+        _fail_usage("--concurrency must be >= 1")
+    if rpm is not None and rpm < 1:
+        _fail_usage("--rpm must be >= 1")
+    if tpm is not None and tpm < 1:
+        _fail_usage("--tpm must be >= 1")
+    if thinking not in {"auto", "on", "off"}:
+        _fail_usage("--thinking must be one of: auto, on, off")
+
+
 @app.callback()
 def _root(
     version: bool | None = typer.Option(
@@ -115,8 +140,7 @@ def cmd_run(
     accept_code: bool = typer.Option(False, "--accept-code-exec"),
     no_code_bench: bool = typer.Option(False, "--no-code-bench"),
     lcb_cutoff: str | None = typer.Option(None, "--lcb-cutoff", help="LiveCodeBench: keep only items with release_date >= YYYY-MM-DD"),
-    no_cache: bool = typer.Option(False, "--no-cache", envvar="EVALBOX_NO_CACHE", help="Disable response cache."),
-    resume: bool = typer.Option(False, "--resume", help="Resume an interrupted run from --output-dir/state.json."),
+    resume: bool = typer.Option(False, "--resume", help="Disabled: response-cache based resume has been removed."),
     prompt_cache_aware: bool = typer.Option(False, "--prompt-cache-aware", help="Prepend a stable system prefix so providers can prompt-cache it. Reports prompt_cache_hit_rate per bench."),
     profile: str | None = typer.Option(None, "--profile"),
     env_file: str | None = typer.Option(None, "--env-file"),
@@ -136,19 +160,39 @@ def cmd_run(
 
     prof = load_profile(profile) if profile else None
 
+    if resume:
+        _fail_usage(
+            "response-cache based --resume was removed; Web runs can automatically "
+            "reattach while the server process is alive. Durable per-question "
+            "checkpoint resume is not implemented yet."
+        )
+
     eff_base_url = base_url or env_str("EVALBOX_BASE_URL") or (prof.base_url if prof else None)
     eff_model = model or env_str("EVALBOX_MODEL")
     eff_adapter = adapter or env_str("EVALBOX_ADAPTER") or (prof.adapter if prof else str(DEFAULTS["adapter"]))
     eff_api_key_env = api_key_env or (prof.api_key_env if prof else None) or str(DEFAULTS["api_key_env"])
-    eff_concurrency = concurrency or env_int("EVALBOX_CONCURRENCY") or int(DEFAULTS["concurrency"])
-    eff_thinking = thinking or env_str("EVALBOX_THINKING") or str(DEFAULTS["thinking"])
-    eff_seed = seed or env_int("EVALBOX_SEED") or int(DEFAULTS["seed"])
+    env_concurrency = env_int("EVALBOX_CONCURRENCY")
+    env_seed = env_int("EVALBOX_SEED")
+    eff_concurrency = (
+        concurrency if concurrency is not None
+        else env_concurrency if env_concurrency is not None
+        else int(DEFAULTS["concurrency"])
+    )
+    eff_thinking = (thinking or env_str("EVALBOX_THINKING") or str(DEFAULTS["thinking"])).lower()
+    eff_seed = seed if seed is not None else env_seed if env_seed is not None else int(DEFAULTS["seed"])
     eff_strict = strict_deterministic or env_bool("EVALBOX_STRICT_DETERMINISTIC")
     eff_samples = samples if samples is not None else int(DEFAULTS["samples"])
 
     if not eff_base_url or not eff_model:
         console.print("[red]error:[/red] --base-url and --model are required (or set EVALBOX_BASE_URL / EVALBOX_MODEL).")
         raise typer.Exit(2)
+    _validate_run_inputs(
+        samples=eff_samples,
+        concurrency=eff_concurrency,
+        rpm=rpm,
+        tpm=tpm,
+        thinking=eff_thinking,
+    )
 
     api_key = resolve_api_key(eff_api_key_env)
     headers: dict[str, str] = dict((prof.extra_headers if prof else {}) or {})
@@ -218,34 +262,8 @@ def cmd_run(
 
     out_root = output_dir or Path("evalbox-runs")
     started_at = _utc_now_iso()
-    if resume:
-        # Reuse the latest run-dir in out_root so subsequent runs land on the
-        # same path. Combined with the response cache, previously-computed
-        # questions return as cache hits (latency_ms=0); only missing ones hit
-        # the network. If no prior run exists, fall back to a fresh run-id.
-        candidates = (
-            sorted(out_root.glob("evalbox-*"), key=lambda p: p.stat().st_mtime, reverse=True)
-            if out_root.exists() else []
-        )
-        if candidates:
-            run_dir = candidates[0]
-            run_id = run_dir.name
-            console.print(f"[bold yellow]--resume[/bold yellow] reusing {run_id}")
-            if no_cache:
-                console.print(
-                    "[yellow]warning:[/yellow] --resume with --no-cache won't skip work; "
-                    "drop --no-cache for the cache-hit fast path."
-                )
-        else:
-            run_id = f"evalbox-{started_at.replace(':','-')}-{_slug(eff_model)}"
-            run_dir = out_root / run_id
-            console.print(
-                f"[yellow]--resume[/yellow] but no prior run found in {out_root}; "
-                f"starting fresh: {run_id}"
-            )
-    else:
-        run_id = f"evalbox-{started_at.replace(':','-')}-{_slug(eff_model)}"
-        run_dir = out_root / run_id
+    run_id = f"evalbox-{started_at.replace(':','-')}-{_slug(eff_model)}"
+    run_dir = out_root / run_id
 
     # Multi-model: comma-separated --model a,b,c. Each runs sequentially into
     # the same parent run-dir as result-<slug>.json, then we print a side-by-
@@ -264,7 +282,7 @@ def cmd_run(
             thinking=eff_thinking, no_thinking_rerun=no_thinking_rerun,
             sampling=sampling_obj, user_drop=user_drop,
             strict=eff_strict, strict_failures=strict_failures,
-            no_cache=no_cache, prompt_cache_aware=prompt_cache_aware,
+            prompt_cache_aware=prompt_cache_aware,
             run_dir=run_dir, started_at=started_at, seed=eff_seed,
             save_questions=save_questions, max_cost_usd=max_cost_usd,
             price_overrides=overrides,
@@ -285,7 +303,7 @@ def cmd_run(
             no_thinking_rerun=no_thinking_rerun, sampling=sampling_obj,
             prompt_cache_aware=prompt_cache_aware,
             user_drop=user_drop, strict=eff_strict, strict_failures=strict_failures,
-            no_cache=no_cache, run_id=run_id, run_dir=run_dir,
+            run_id=run_id, run_dir=run_dir,
             started_at=started_at, seed=eff_seed, save_questions=save_questions,
             max_cost_usd=max_cost_usd, price_overrides=overrides,
         )
@@ -309,8 +327,6 @@ def cmd_run(
             user_drop=user_drop,
             strict=eff_strict,
             strict_failures=strict_failures,
-            no_cache=no_cache,
-            resume=resume,
             prompt_cache_aware=prompt_cache_aware,
             run_id=run_id,
             run_dir=run_dir,
@@ -341,8 +357,6 @@ async def _run_async(
     user_drop,
     strict: bool,
     strict_failures: bool,
-    no_cache: bool,
-    resume: bool,
     prompt_cache_aware: bool,
     run_id: str,
     run_dir: Path,
@@ -355,8 +369,6 @@ async def _run_async(
     questions_filename: str = "result.questions.jsonl",
     print_table: bool = True,
 ) -> tuple[list, dict]:
-    from llm_evalbox.cache import ResponseCache
-
     cap = capability_for(model)
     adapter = resolve_adapter(
         kind=adapter_kind,
@@ -364,7 +376,6 @@ async def _run_async(
         api_key=api_key,
         extra_headers=extra_headers,
     )
-    cache = ResponseCache(enabled=not no_cache)
 
     console.print(f"[bold]evalbox[/bold] {model} @ {base_url} (adapter={adapter.name})")
     console.print(f"  capability: temp={'✓' if cap.accepts_temperature else '✗'} "
@@ -409,13 +420,13 @@ async def _run_async(
                     model=model,
                     on_progress=_on_progress,
                     concurrency=concurrency,
+                    rpm=rpm,
+                    tpm=tpm,
                     sampling=sampling,
                     thinking=thinking,
                     strict_deterministic=strict,
                     strict_failures=strict_failures,
                     no_thinking_rerun=no_thinking_rerun,
-                    cache=cache,
-                    base_url=base_url,
                     prompt_cache_aware=prompt_cache_aware,
                     initial_drop_params=list(user_drop),
                 )
@@ -497,7 +508,7 @@ def _run_multi_model(
     benches, samples, concurrency, rpm, tpm,
     thinking, no_thinking_rerun,
     sampling, user_drop, strict, strict_failures,
-    no_cache, prompt_cache_aware,
+    prompt_cache_aware,
     run_dir, started_at, seed, save_questions,
     max_cost_usd, price_overrides,
 ):
@@ -505,15 +516,14 @@ def _run_multi_model(
     model's result.json lands in the same parent run-dir under
     `result-<slug>.json`. We re-instantiate benches per model so their
     few-shot caches don't carry over."""
-    bench_classes = [type(b) for b in benches]
-
     def _fresh():
         out = []
-        for cls in bench_classes:
-            inst = cls()
-            v = getattr(benches[0] if benches else None, "cutoff", None)
-            if v is not None and hasattr(inst, "cutoff"):
-                inst.cutoff = v
+        for source in benches:
+            inst = type(source)()
+            for attr in ("cutoff",):
+                v = getattr(source, attr, None)
+                if v is not None and hasattr(inst, attr):
+                    setattr(inst, attr, v)
             out.append(inst)
         return out
 
@@ -531,7 +541,7 @@ def _run_multi_model(
                 thinking=thinking, no_thinking_rerun=no_thinking_rerun,
                 sampling=sampling, user_drop=user_drop,
                 strict=strict, strict_failures=strict_failures,
-                no_cache=no_cache, resume=False, prompt_cache_aware=prompt_cache_aware,
+                prompt_cache_aware=prompt_cache_aware,
                 run_id=sub_run_id, run_dir=run_dir,
                 started_at=_utc_now_iso(), seed=seed,
                 save_questions=save_questions, max_cost_usd=max_cost_usd,
@@ -560,7 +570,7 @@ def _run_thinking_compare(
     base_url, model, adapter_kind, api_key, extra_headers, benches,
     samples, concurrency, rpm, tpm,
     no_thinking_rerun, sampling, user_drop, strict, strict_failures,
-    no_cache, prompt_cache_aware,
+    prompt_cache_aware,
     run_id, run_dir, started_at, seed, save_questions,
     max_cost_usd, price_overrides,
 ):
@@ -568,15 +578,13 @@ def _run_thinking_compare(
 
     # Need fresh benches each pass — some carry few-shot state set during
     # load_dataset (e.g. MMLU). We accept duplicate dataset loads.
-    bench_classes = [type(b) for b in benches]
-
     def _fresh():
         out = []
-        for cls in bench_classes:
-            inst = cls()
+        for source in benches:
+            inst = type(source)()
             # propagate optional knobs (e.g. lcb cutoff)
             for attr in ("cutoff",):
-                v = getattr(benches[0] if benches else None, attr, None)
+                v = getattr(source, attr, None)
                 if v is not None and hasattr(inst, attr):
                     setattr(inst, attr, v)
             out.append(inst)
@@ -591,7 +599,7 @@ def _run_thinking_compare(
             thinking="off", no_thinking_rerun=no_thinking_rerun,
             sampling=sampling, user_drop=user_drop,
             strict=strict, strict_failures=strict_failures,
-            no_cache=no_cache, resume=False, prompt_cache_aware=prompt_cache_aware,
+            prompt_cache_aware=prompt_cache_aware,
             run_id=run_id, run_dir=run_dir, started_at=started_at, seed=seed,
             save_questions=save_questions, max_cost_usd=max_cost_usd,
             price_overrides=price_overrides,
@@ -610,7 +618,7 @@ def _run_thinking_compare(
             thinking="on", no_thinking_rerun=no_thinking_rerun,
             sampling=sampling, user_drop=user_drop,
             strict=strict, strict_failures=strict_failures,
-            no_cache=no_cache, resume=False, prompt_cache_aware=prompt_cache_aware,
+            prompt_cache_aware=prompt_cache_aware,
             run_id=run_id, run_dir=run_dir, started_at=_utc_now_iso(), seed=seed,
             save_questions=save_questions, max_cost_usd=max_cost_usd,
             price_overrides=price_overrides,

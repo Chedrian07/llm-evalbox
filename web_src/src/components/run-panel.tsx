@@ -273,11 +273,6 @@ export function RunPanel({
             onChange={s.setStrictFailures}
             label={t("options.strict_failures")}
           />
-          <ToggleRow
-            checked={s.noCache}
-            onChange={s.setNoCache}
-            label={t("options.no_cache")}
-          />
         </div>
 
         {/* Advanced — collapsible */}
@@ -430,4 +425,3 @@ function ToggleRow({
     </label>
   );
 }
-

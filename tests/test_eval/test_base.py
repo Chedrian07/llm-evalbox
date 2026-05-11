@@ -19,8 +19,10 @@ class _MockAdapter(ChatAdapter):
         super().__init__()
         self._map = answer_map
         self._think = think
+        self.calls = 0
 
     async def chat(self, req: ChatRequest) -> ChatResponse:
+        self.calls += 1
         # Find which mini_mmlu item this prompt corresponds to (matches "Capital of France"):
         prompt = req.messages[-1].content
         # "answer key" in our test is the substring lookup
@@ -58,6 +60,16 @@ class _MiniMC(BaseBenchmark):
 
 
 @pytest.mark.asyncio
+async def test_run_rejects_invalid_concurrency(mini_mmlu):
+    from llm_evalbox.core.exceptions import ConfigError
+
+    bench = _MiniMC()
+    adapter = _MockAdapter({})
+    with pytest.raises(ConfigError, match="concurrency"):
+        await bench.run(adapter, mini_mmlu, model="mock-model", concurrency=0)
+
+
+@pytest.mark.asyncio
 async def test_run_perfect_accuracy(mini_mmlu):
     bench = _MiniMC()
     answer_map = {it["question"]: it["answer"] for it in mini_mmlu}
@@ -67,6 +79,20 @@ async def test_run_perfect_accuracy(mini_mmlu):
     assert result.correct_count == len(mini_mmlu)
     assert result.accuracy == pytest.approx(1.0)
     assert result.thinking_used is False
+
+
+@pytest.mark.asyncio
+async def test_run_same_input_calls_adapter_each_time(mini_mmlu):
+    bench = _MiniMC()
+    answer_map = {it["question"]: it["answer"] for it in mini_mmlu}
+    adapter = _MockAdapter(answer_map)
+
+    await bench.run(adapter, mini_mmlu, model="mock-model", concurrency=2, thinking="off")
+    first_calls = adapter.calls
+    await bench.run(adapter, mini_mmlu, model="mock-model", concurrency=2, thinking="off")
+
+    assert first_calls == len(mini_mmlu)
+    assert adapter.calls == len(mini_mmlu) * 2
 
 
 @pytest.mark.asyncio

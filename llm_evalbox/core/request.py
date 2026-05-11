@@ -94,7 +94,6 @@ class ChatResponse(BaseModel):
     provider_request_id: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
     thinking_observed: bool = False
-    cache_hit: bool = False
 
 
 class ModelInfo(BaseModel):

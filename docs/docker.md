@@ -31,7 +31,7 @@ The first run builds the image (multi-stage: Node 20 → Python 3.12-slim,
 
 | Path on host           | Path in container | What                                            |
 |------------------------|-------------------|-------------------------------------------------|
-| `./data/`              | `/data/`          | `cache/` (response cache) + `config/` + `runs.sqlite` (history, learned capabilities, profiles) |
+| `./data/`              | `/data/`          | `cache/` (datasets) + `config/` + `runs.sqlite` (history, learned capabilities, profiles) |
 | `./evalbox-runs/`      | `/app/evalbox-runs/` | Per-run `result.json` + `result.questions.jsonl` |
 | `./.env`               | `EVALBOX_*` env   | Loaded via `env_file` — same shape as host CLI  |
 

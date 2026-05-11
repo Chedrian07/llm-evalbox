@@ -60,12 +60,13 @@ export interface RunCreateRequest {
   benches: string[];
   samples?: number;
   concurrency?: number;
+  rpm?: number | null;
+  tpm?: number | null;
   thinking?: "auto" | "on" | "off";
   no_thinking_rerun?: boolean;
   prompt_cache_aware?: boolean;
   accept_code_exec?: boolean;
   strict_failures?: boolean;
-  no_cache?: boolean;
   max_cost_usd?: number | null;
   sampling?: {
     temperature?: number | null;
@@ -98,7 +99,6 @@ export interface BenchmarkResult {
   duration_s?: number;
   thinking_used?: boolean;
   denominator_policy?: "lenient" | "strict" | string;
-  cache_hits?: number;
   prompt_cache_hit_rate?: number;
   learned_drop_params?: string[];
 }
@@ -143,6 +143,15 @@ export interface RunDetail {
   finished_at: string | null;
   messages?: RunMessage[];
   result: RunResult | null;
+}
+
+export interface RunSummary {
+  run_id: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  model: string;
+  base_url: string;
 }
 
 export interface HistorySummary {
@@ -213,7 +222,6 @@ export interface ServerDefaults {
   tpm: number | null;
   max_cost_usd: number | null;
   accept_code_exec: boolean;
-  no_cache: boolean;
   strict_failures: boolean;
   no_thinking_rerun: boolean;
   prompt_cache_aware: boolean;
@@ -270,6 +278,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(req),
     }),
+  listRuns: () => request<RunSummary[]>("/api/runs"),
   getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),
   cancelRun: (id: string) =>
     request<{ status: string }>(`/api/runs/${id}`, { method: "DELETE" }),

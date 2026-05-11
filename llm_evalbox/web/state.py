@@ -33,7 +33,9 @@ class RunState:
     status: str = "queued"   # queued | running | completed | failed | cancelled
     started_at: str = field(default_factory=_utc_now_iso)
     finished_at: str | None = None
-    queue: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
+    events: list[dict[str, Any]] = field(default_factory=list)
+    subscribers: set[asyncio.Queue[dict[str, Any]]] = field(default_factory=set)
+    events_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     task: asyncio.Task | None = None
     final_payload: dict[str, Any] | None = None
     messages: list[dict[str, Any]] = field(default_factory=list)

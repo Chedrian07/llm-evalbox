@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""--prompt-cache-aware: stable system prefix prepended; cache_hit_rate emitted."""
+"""--prompt-cache-aware: stable system prefix prepended."""
 
 from __future__ import annotations
 

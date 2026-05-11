@@ -42,7 +42,6 @@ export interface LogEntry {
   textPreview?: string;
   reasoningPreview?: string;
   latencyMs?: number;
-  cacheHit?: boolean;
   tokens?: { prompt?: number; completion?: number; reasoning?: number };
 }
 
@@ -76,7 +75,6 @@ export function messagesToLogEntries(
         textPreview: md.text_preview,
         reasoningPreview: md.reasoning_preview,
         latencyMs: md.latency_ms,
-        cacheHit: !!md.cache_hit,
         tokens: md.tokens,
         text: m.content ?? "",
       };
@@ -266,7 +264,6 @@ function LogLine({ entry }: { entry: LogEntry }) {
       entry.predicted ? `pred="${truncOneLine(entry.predicted, 30)}"` : null,
       entry.expected ? `exp="${truncOneLine(entry.expected, 30)}"` : null,
       entry.latencyMs != null ? `${(entry.latencyMs / 1000).toFixed(1)}s` : null,
-      entry.cacheHit ? "cache" : null,
       entry.tokens?.completion != null
         ? `${entry.tokens.completion}↓${entry.tokens.reasoning ? `+${entry.tokens.reasoning}r` : ""}`
         : null,

@@ -99,7 +99,6 @@ def get_defaults() -> dict[str, Any]:
         "max_cost_usd": _float_env("EVALBOX_MAX_COST_USD"),
         # Boolean toggles
         "accept_code_exec": _bool_env("EVALBOX_ACCEPT_CODE_EXEC"),
-        "no_cache": _bool_env("EVALBOX_NO_CACHE"),
         "strict_failures": _bool_env("EVALBOX_STRICT_FAILURES"),
         "no_thinking_rerun": _bool_env("EVALBOX_NO_THINKING_RERUN"),
         "prompt_cache_aware": _bool_env("EVALBOX_PROMPT_CACHE_AWARE"),
