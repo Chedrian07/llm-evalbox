@@ -101,7 +101,7 @@ class ResponsesAdapter(ChatAdapter):
         ]
         body: dict[str, Any] = {"model": req.model, "input": input_items}
 
-        # max_output_tokens (Responses) — clamp when thinking is on
+        # max_output_tokens (Responses) — force the thinking budget when on
         thinking_on = req.thinking == ThinkingMode.ON.value
         token_budget = thinking_token_budget(
             base_max_tokens=req.max_tokens,

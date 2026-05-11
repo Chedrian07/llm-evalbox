@@ -9,7 +9,7 @@ Three jobs:
 2. `parse_thinking(text, raw_response)` — split visible text from reasoning
    tokens (`<think>` blocks, `reasoning_content` field, Responses reasoning
    items).
-3. `thinking_token_budget(...)` — clamp `max_tokens` when thinking is on.
+3. `thinking_token_budget(...)` — set the output token budget when thinking is on.
 
 Mapping matrix follows PLAN.md §6.2 / appendix B. Adapters call these
 helpers; benchmarks never touch them directly.
@@ -22,8 +22,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-THINKING_MIN_TOKENS = 8192
-THINKING_MAX_TOKENS = 32768
+THINKING_OUTPUT_TOKENS = 81920
 
 _THINK_TAG_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 _THINKING_TAG_RE = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
@@ -137,11 +136,11 @@ def apply_thinking_to_request(
 
 
 def thinking_token_budget(*, base_max_tokens: int, model: str, thinking_on: bool) -> int:
-    """Clamp `max_tokens` when thinking is on.
+    """Return the output token budget for a request.
 
     - gpt-oss (Harmony) needs 4× because its analysis channel can consume the
       full budget before the final channel is emitted.
-    - All other thinking-on families: clamp to [THINKING_MIN, THINKING_MAX].
+    - All other thinking-on families: force the default output budget.
     - thinking off: return base unchanged.
     """
     if not thinking_on:
@@ -149,9 +148,9 @@ def thinking_token_budget(*, base_max_tokens: int, model: str, thinking_on: bool
 
     fam = detect_family(model)
     if fam is not None and fam.family == "gpt-oss":
-        return max(base_max_tokens * 4, THINKING_MIN_TOKENS)
+        return max(base_max_tokens * 4, THINKING_OUTPUT_TOKENS)
 
-    return min(max(base_max_tokens, THINKING_MIN_TOKENS), THINKING_MAX_TOKENS)
+    return THINKING_OUTPUT_TOKENS
 
 
 def parse_thinking(text: str, raw_response: dict[str, Any] | None = None) -> tuple[str, str, bool]:

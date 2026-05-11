@@ -137,13 +137,14 @@ def test_apply_thinking_auto_is_noop():
     assert ct == {"enable_thinking": False}
 
 
-def test_token_budget_clamp():
-    assert thinking_token_budget(base_max_tokens=128, model="Qwen3-32B", thinking_on=True) >= 8192
+def test_token_budget_forces_thinking_default():
+    assert thinking_token_budget(base_max_tokens=128, model="Qwen3-32B", thinking_on=True) == 81920
     assert thinking_token_budget(base_max_tokens=128, model="Qwen3-32B", thinking_on=False) == 128
 
 
 def test_token_budget_gpt_oss_quadruples():
-    assert thinking_token_budget(base_max_tokens=4000, model="gpt-oss-20b", thinking_on=True) == 16000
+    assert thinking_token_budget(base_max_tokens=4000, model="gpt-oss-20b", thinking_on=True) == 81920
+    assert thinking_token_budget(base_max_tokens=30000, model="gpt-oss-20b", thinking_on=True) == 120000
 
 
 def test_parse_thinking_strips_think_tag():

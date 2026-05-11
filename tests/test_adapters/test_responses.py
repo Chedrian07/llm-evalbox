@@ -147,6 +147,7 @@ async def test_body_serializes_messages_to_input():
     assert body["input"][0]["content"][0]["type"] == "input_text"
     # max_output_tokens (not max_tokens / max_completion_tokens)
     assert "max_output_tokens" in body
+    assert body["max_output_tokens"] == 81920
     assert "max_tokens" not in body
     # thinking on → reasoning.effort set
     assert body["reasoning"]["effort"] in ("high", "medium", "low", "xhigh")

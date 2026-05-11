@@ -128,5 +128,5 @@ async def test_qwen3_thinking_on_sets_chat_template_kwargs(chat_completion_paylo
     body = captured["body"]
     ct = body.get("chat_template_kwargs", {})
     assert ct.get("enable_thinking") is True
-    # thinking on bumps max_tokens to at least THINKING_MIN_TOKENS
-    assert body["max_tokens"] >= 8192
+    # thinking on forces the default output token budget.
+    assert body["max_tokens"] == 81920

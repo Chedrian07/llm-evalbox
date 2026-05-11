@@ -70,7 +70,7 @@
     "on": "on",
     "off": "off",
     "auto_desc": "Detect on first batch; switch to on if observed.",
-    "on_desc": "Force thinking on (max_tokens clamped to 8K–32K).",
+    "on_desc": "Force thinking on (default max_tokens 81920).",
     "off_desc": "Force thinking off (where supported)."
   },
   "benches": {

@@ -70,7 +70,7 @@
     "on": "on",
     "off": "off",
     "auto_desc": "첫 배치에서 감지되면 on 으로 자동 전환.",
-    "on_desc": "강제 on (max_tokens 8K–32K 로 클램프).",
+    "on_desc": "강제 on (기본 max_tokens 81920).",
     "off_desc": "지원되는 모델에서 강제 off."
   },
   "benches": {
