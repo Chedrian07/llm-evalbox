@@ -9,6 +9,7 @@ and cached/reasoning token accounting).
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -66,10 +67,13 @@ class ChatCompletionsAdapter(ChatAdapter):
             if self.api_key:
                 headers["Authorization"] = f"Bearer {self.api_key}"
             headers.update(self.extra_headers)
+            # 로컬 대형 모델 서버(예: mlx_lm.server + 30B, 8192토큰 생성)는 기본 120s로는
+            # 부족해 read timeout이 난다. EVALBOX_HTTP_TIMEOUT(초)로 opt-in 상향(미설정 시 기존값).
+            _to = float(os.getenv("EVALBOX_HTTP_TIMEOUT", "") or self.timeout)
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 headers=headers,
-                timeout=httpx.Timeout(self.timeout, connect=10.0),
+                timeout=httpx.Timeout(_to, connect=10.0),
                 http2=False,  # http2 sometimes flaky on local gateways
             )
         return self._client
